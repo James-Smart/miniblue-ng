@@ -1,6 +1,6 @@
 # Services Overview
 
-miniblue emulates 28 Azure services on a single port. All services use in-memory storage and require no authentication.
+miniblue emulates 32 Azure services on a single port. All services use in-memory storage and require no authentication.
 
 ## Service status
 
@@ -15,6 +15,7 @@ miniblue emulates 28 Azure services on a single port. All services use in-memory
 | [Service Bus](service-bus.md) | `Microsoft.ServiceBus` | Done | -- | Yes |
 | Azure Functions | `Microsoft.Web` | Done | Yes | -- |
 | [Virtual Networks](virtual-networks.md) | `Microsoft.Network` | Done | Yes | -- |
+| Network Interfaces | `Microsoft.Network` | Done | Yes | -- |
 | [DNS Zones](dns-zones.md) | `Microsoft.Network` | Done | Yes | -- |
 | [Container Registry](container-registry.md) | `Microsoft.ContainerRegistry` | Done | Yes | Yes |
 | Event Grid | `Microsoft.EventGrid` | Done | Yes | Yes |
@@ -27,6 +28,8 @@ miniblue emulates 28 Azure services on a single port. All services use in-memory
 | [Container Instances](container-instances.md) | `Microsoft.ContainerInstance` | Done | Yes | -- |
 | [Kubernetes Service (AKS)](kubernetes-service.md) | `Microsoft.ContainerService` | Done | Yes | Yes (real k3s, opt-in) |
 | [Virtual Machines](virtual-machines.md) | `Microsoft.Compute` | Done | Yes | Yes (real Docker, opt-in) |
+| Managed Disks | `Microsoft.Compute` | Done | Yes | -- |
+| SSH Public Keys | `Microsoft.Compute` | Done | Yes | -- |
 | Public IP Addresses | `Microsoft.Network` | Done | Yes | -- |
 | Network Security Groups | `Microsoft.Network` | Done | Yes | -- |
 | Load Balancer | `Microsoft.Network` | Done | Yes | -- |

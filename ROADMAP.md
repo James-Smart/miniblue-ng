@@ -24,10 +24,7 @@ Priorities shift based on community feedback. Open an issue or discussion if som
 | Traffic Manager | `Microsoft.Network` | Medium | DNS-based routing profiles |
 | Azure Front Door | `Microsoft.Cdn` | Medium | CDN and WAF policies |
 | Private DNS Zones | `Microsoft.Network` | Medium | Extends existing DNS service |
-| Network Interfaces (NIC) | `Microsoft.Network` | Medium | Required for VM provisioning |
 | Azure Policy | `Microsoft.Authorization` | Medium | Policy definitions, assignments and evaluation on deployments |
-| Managed Disks | `Microsoft.Compute` | Low | Disk resources for VMs |
-| Virtual Machines | `Microsoft.Compute` | Low | ARM management only |
 
 ### Platform improvements
 

@@ -26,7 +26,11 @@ What's implemented, stubbed, and unsupported in miniblue compared to real Azure 
 | Azure Cache for Redis | Full | Full | Full | Full | - | Real connectivity check via REDIS_URL |
 | Container Instances | Full | Full | Full | Full | - | Real Docker containers when available |
 | Kubernetes Service (AKS) | Full | Full | Full | Full | - | Real k3s clusters with `AKS_BACKEND=k3s`; agent pool GET only |
-| Virtual Machines | Full | Full | Full | Full | - | Real Docker containers when available; services, logs, run-command, identity attestation |
+| Virtual Machines | Full | Full | Full | Full | Full (PATCH) | Real Docker containers when available; NIC/disk linkage, instanceView, vmSizes, extensions, SSH keys, custom data |
+| VM Extensions | Full | Full | Full | Full | Full (PATCH) | Metadata only; protected settings hidden, instanceView synthesized |
+| Managed Disks | Full | Full | Full | Full | Full (PATCH) | Attachment tracking, OS/data disk lifecycle, delete blocked while attached |
+| SSH Public Keys | Full | Full | Full | Full | Full (PATCH) | Generated RSA key pairs, `generateKeyPair` action |
+| Network Interfaces | Full | Full | Full | Full | Full (PATCH) | Dynamic private IP allocation, VM link tracking |
 | Public IP Addresses | Full | Full | Full | Full | - | Static/dynamic allocation, auto-generated IPs |
 | Network Security Groups | Full | Full | Full | Full | - | Security rules, default rules, cascade delete |
 | Load Balancer | Full | Full | Full | Full | - | Frontends, backends, rules, probes, NAT |
@@ -59,7 +63,7 @@ What's implemented, stubbed, and unsupported in miniblue compared to real Azure 
 | Instance discovery | Full | Authority validation (internal) |
 | Managed Identity (IMDS) | Full | Token endpoint for workload identity |
 | Cloud metadata | Full | Terraform provider metadata |
-| /health | Full | 26 services listed |
+| /health | Full | 32 services listed |
 | /metrics | Full | Uptime, request count, error rate |
 
 ## Not Implemented

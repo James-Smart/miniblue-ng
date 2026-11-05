@@ -43,25 +43,26 @@ No Azure account or credentials needed.
 
 ## What it does
 
-28 Azure services emulated behind a single port. Works with Terraform, Pulumi, Azure SDKs, and curl.
+32 Azure services emulated behind a single port. Works with Terraform, Pulumi, Azure SDKs, and curl.
 
 | Service | Service | Service |
 |---------|---------|---------|
 | Resource Groups | Blob Storage | Table Storage |
 | Queue Storage | Key Vault | Cosmos DB |
 | Service Bus | Azure Functions | Virtual Networks |
-| DNS Zones | Container Registry | Event Grid |
-| App Configuration | Managed Identity | DB for PostgreSQL |
-| DB for MySQL | Azure SQL Database | Azure Cache for Redis |
-| Container Instances | Kubernetes Service (AKS) | Public IP Addresses |
-| Network Security Groups | Load Balancer | Application Gateway |
-| Storage Accounts | Virtual Machines | |
+| Network Interfaces | DNS Zones | Container Registry |
+| Event Grid | App Configuration | Managed Identity |
+| DB for PostgreSQL | DB for MySQL | Azure SQL Database |
+| Azure Cache for Redis | Container Instances | Kubernetes Service (AKS) |
+| Public IP Addresses | Network Security Groups | Load Balancer |
+| Application Gateway | Storage Accounts | Virtual Machines |
+| Managed Disks | SSH Public Keys | |
 
 ## How it compares
 
 | | LocalStack (AWS) | MiniStack (AWS) | Azurite (Azure) | miniblue |
 |---|---|---|---|---|
-| Services | 80+ | 36 | 3 (storage only) | **28** |
+| Services | 80+ | 36 | 3 (storage only) | **32** |
 | Docker image | ~1GB | ~200MB | ~300MB | **~8MB** |
 | Startup | ~10s | ~5s | ~3s | **<1s** |
 | Real backends | DynamoDB Local | RDS, S3, SQS | No | **Postgres, Redis, Docker** |
