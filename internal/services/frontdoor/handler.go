@@ -95,6 +95,17 @@ func (h *Handler) Register(r chi.Router) {
 					})
 				})
 			})
+
+			r.Route("/customDomains", func(r chi.Router) {
+				domains := &nested{store: h.store, spec: customDomainSpec}
+				r.Get("/", domains.list)
+				r.Route("/{customDomainName}", func(r chi.Router) {
+					r.Put("/", domains.create)
+					r.Get("/", domains.get)
+					r.Patch("/", domains.patch)
+					r.Delete("/", domains.delete)
+				})
+			})
 		})
 	})
 	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Cdn/profiles", h.ListInSubscription)

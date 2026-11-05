@@ -1,6 +1,10 @@
 package frontdoor
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/moabukar/miniblue/internal/store"
+)
 
 // Store key layout. Everything lives under fd:<sub>:<rg>:<kind>:... so a
 // resource group's full Front Door footprint can be deleted with one prefix.
@@ -42,6 +46,46 @@ func nestedKey(sub, rg, keyKind, profile string, parents []string, name string) 
 		key += ":" + parent
 	}
 	return key + ":" + name
+}
+
+// removeCustomDomainFromRoutes scrubs domainID from the customDomains array of
+// every route under the profile. The provider models custom-domain association
+// client-side, so the route array is the only place the link is recorded.
+func removeCustomDomainFromRoutes(s *store.Store, sub, rg, profile, domainID string) {
+	prefix := "fd:" + sub + ":" + rg + ":route:" + profile + ":"
+	for _, key := range s.ListKeysByPrefix(prefix) {
+		v, exists := s.Get(key)
+		if !exists {
+			continue
+		}
+		rec, isMap := v.(map[string]interface{})
+		if !isMap {
+			continue
+		}
+
+		props := mapVal(rec["properties"])
+		domains, isList := props["customDomains"].([]interface{})
+		if !isList {
+			continue
+		}
+
+		kept := make([]interface{}, 0, len(domains))
+		removed := false
+		for _, domain := range domains {
+			if stringVal(mapVal(domain)["id"]) == domainID {
+				removed = true
+				continue
+			}
+			kept = append(kept, domain)
+		}
+		if !removed {
+			continue
+		}
+
+		props["customDomains"] = kept
+		rec["properties"] = props
+		s.Set(key, rec)
+	}
 }
 
 // mergeMaps recursively merges patch into dst. Maps merge, arrays and scalars

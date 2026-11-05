@@ -1,19 +1,23 @@
 package frontdoor
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 const (
-	profileType     = "Microsoft.Cdn/profiles"
-	endpointType    = "Microsoft.Cdn/profiles/afdEndpoints"
-	originGroupType = "Microsoft.Cdn/profiles/originGroups"
-	originType      = "Microsoft.Cdn/profiles/originGroups/origins"
-	ruleSetType     = "Microsoft.Cdn/profiles/ruleSets"
-	ruleType        = "Microsoft.Cdn/profiles/ruleSets/rules"
-	routeType       = "Microsoft.Cdn/profiles/afdEndpoints/routes"
+	profileType      = "Microsoft.Cdn/profiles"
+	endpointType     = "Microsoft.Cdn/profiles/afdEndpoints"
+	originGroupType  = "Microsoft.Cdn/profiles/originGroups"
+	originType       = "Microsoft.Cdn/profiles/originGroups/origins"
+	ruleSetType      = "Microsoft.Cdn/profiles/ruleSets"
+	ruleType         = "Microsoft.Cdn/profiles/ruleSets/rules"
+	routeType        = "Microsoft.Cdn/profiles/afdEndpoints/routes"
+	customDomainType = "Microsoft.Cdn/profiles/customDomains"
 )
 
 // profileResponse builds the full profile response. It merges input over the
@@ -234,6 +238,61 @@ func routeResponse(parent, input, existing map[string]interface{}) map[string]in
 	rec["properties"] = props
 
 	return rec
+}
+
+// customDomainResponse builds a custom domain response. The validation token
+// and expiration are generated once and preserved from the existing record on
+// later PUTs and PATCHes, so the provider never sees them drift.
+func customDomainResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	previous := mapVal(mapVal(existing["properties"])["validationProperties"])
+
+	validation := cloneMap(mapVal(props["validationProperties"]))
+	if validation == nil {
+		validation = map[string]interface{}{}
+	}
+
+	token := stringVal(validation["validationToken"])
+	if token == "" {
+		token = stringVal(previous["validationToken"])
+	}
+	if token == "" {
+		token = newValidationToken()
+	}
+	validation["validationToken"] = token
+
+	expiration := stringVal(validation["expirationDate"])
+	if expiration == "" {
+		expiration = stringVal(previous["expirationDate"])
+	}
+	if expiration == "" {
+		expiration = time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339)
+	}
+	validation["expirationDate"] = expiration
+
+	defaultString(validation, "validationState", "Pending")
+	props["validationProperties"] = validation
+	defaultString(props, "domainValidationState", "Pending")
+	defaultString(props, "deploymentStatus", "NotStarted")
+	rec["properties"] = props
+
+	return rec
+}
+
+// newValidationToken returns 32 lowercase hex characters, the shape Azure uses
+// for a custom domain's DNS TXT validation token.
+func newValidationToken() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return strings.ReplaceAll(uuid.NewString(), "-", "")
+	}
+	return hex.EncodeToString(b)
 }
 
 // defaultNumber sets key to value when the map does not already hold it.

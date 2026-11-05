@@ -20,6 +20,10 @@ type resourceSpec struct {
 	parents  []string // chi params needed to build the parent key, e.g. profileName
 	computed func(parent map[string]interface{}, input map[string]interface{}, existing map[string]interface{}) map[string]interface{}
 	children []string // key kinds removed when this resource is deleted
+
+	// beforeDelete runs before the record is removed. Resources with
+	// client-side associations use it to clean references in sibling records.
+	beforeDelete func(s *store.Store, sub, rg, profile, id string)
 }
 
 // nested serves CRUD for a resource described by a resourceSpec.
@@ -102,16 +106,23 @@ func (n *nested) patch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (n *nested) delete(w http.ResponseWriter, r *http.Request) {
-	_, sub, rg, parents, ok := n.parentContext(w, r)
+	parent, sub, rg, parents, ok := n.parentContext(w, r)
 	if !ok {
 		return
 	}
 
 	name := resourceName(r)
-	if !n.store.Delete(n.resourceKey(sub, rg, parents, name)) {
+	key := n.resourceKey(sub, rg, parents, name)
+	if !n.store.Exists(key) {
 		azerr.NotFound(w, n.spec.armType, name)
 		return
 	}
+
+	if n.spec.beforeDelete != nil {
+		id := resourceID(stringVal(parent["id"]), n.spec.segment, name)
+		n.spec.beforeDelete(n.store, sub, rg, profileOf(parents), id)
+	}
+	n.store.Delete(key)
 
 	for _, child := range n.spec.children {
 		prefix := nestedKey(sub, rg, child, profileOf(parents), parentsAfterProfile(parents), name) + ":"
@@ -293,6 +304,19 @@ var routeSpec = resourceSpec{
 	armType:  routeType,
 	parents:  []string{"profileName", "endpointName"},
 	computed: routeResponse,
+}
+
+// customDomainSpec is the custom domain child of a profile. Associations with
+// routes are client-side, so deleting a domain scrubs its ID from every route
+// in the profile before the record is removed.
+var customDomainSpec = resourceSpec{
+	kind:         "customDomain",
+	keyKind:      "customdomain",
+	segment:      "customDomains",
+	armType:      customDomainType,
+	parents:      []string{"profileName"},
+	computed:     customDomainResponse,
+	beforeDelete: removeCustomDomainFromRoutes,
 }
 
 // originGroupSpec is the origin group child of a profile.
