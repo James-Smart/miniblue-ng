@@ -68,7 +68,7 @@ func profileResponse(sub, rg, name string, input, existing map[string]interface{
 // endpointResponse builds an AFD endpoint response. The host name is generated
 // once at create time and preserved from the existing record on updates.
 func endpointResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {
@@ -103,7 +103,7 @@ func generatedEndpointHostName(name string) string {
 // balancing settings are echoed, with the provider's defaults filled in for
 // any omitted field.
 func originGroupResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {
@@ -143,7 +143,7 @@ func originGroupResponse(parent, input, existing map[string]interface{}) map[str
 // originResponse builds an origin response. It records the parent origin group
 // and fills in the defaults the provider expects for omitted fields.
 func originResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {
@@ -173,7 +173,7 @@ func originResponse(parent, input, existing map[string]interface{}) map[string]i
 // ruleSetResponse builds a rule set response. Rule sets carry only the common
 // computed properties.
 func ruleSetResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {
@@ -188,7 +188,7 @@ func ruleSetResponse(parent, input, existing map[string]interface{}) map[string]
 // ruleResponse builds a rule response. Conditions and actions are opaque: they
 // are echoed exactly as supplied, without validating their shape.
 func ruleResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {
@@ -212,7 +212,7 @@ func ruleResponse(parent, input, existing map[string]interface{}) map[string]int
 // settings are echoed with the provider's defaults filled in. The custom domain
 // list is preserved exactly as written, including its order.
 func routeResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {
@@ -231,10 +231,12 @@ func routeResponse(parent, input, existing map[string]interface{}) map[string]in
 	defaultString(props, "linkToDefaultDomain", "Enabled")
 	defaultString(props, "httpsRedirect", "Enabled")
 	defaultString(props, "enabledState", "Enabled")
-	if _, ok := props["customDomains"]; !ok {
+	// Only apply the empty-list defaults on create. A PATCH that explicitly
+	// nulls the association list must leave it absent, including on later GETs.
+	if _, ok := props["customDomains"]; !ok && existing == nil {
 		props["customDomains"] = []interface{}{}
 	}
-	if _, ok := props["ruleSets"]; !ok {
+	if _, ok := props["ruleSets"]; !ok && existing == nil {
 		props["ruleSets"] = []interface{}{}
 	}
 	defaultString(props, "deploymentStatus", "NotStarted")
@@ -247,7 +249,7 @@ func routeResponse(parent, input, existing map[string]interface{}) map[string]in
 // and expiration are generated once and preserved from the existing record on
 // later PUTs and PATCHes, so the provider never sees them drift.
 func customDomainResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {
@@ -293,26 +295,26 @@ func customDomainResponse(parent, input, existing map[string]interface{}) map[st
 // subject alternative names Azure fills in, so the provider's flatten does not
 // see zero values for fields it expects.
 func secretResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {
 		props = map[string]interface{}{}
 	}
 
-	params := cloneMap(mapVal(props["parameters"]))
-	if params == nil {
-		params = map[string]interface{}{}
-	}
-	if stringVal(params["type"]) == "CustomerCertificate" {
-		if stringVal(params["expirationDate"]) == "" {
-			params["expirationDate"] = time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339)
+	// Only echo parameters when present. A PATCH that explicitly nulls them must
+	// leave the key absent rather than recreating an empty tagged union.
+	if params := cloneMap(mapVal(props["parameters"])); params != nil {
+		if stringVal(params["type"]) == "CustomerCertificate" {
+			if stringVal(params["expirationDate"]) == "" {
+				params["expirationDate"] = time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339)
+			}
+			if v, ok := params["subjectAlternativeNames"]; !ok || v == nil {
+				params["subjectAlternativeNames"] = []interface{}{}
+			}
 		}
-		if v, ok := params["subjectAlternativeNames"]; !ok || v == nil {
-			params["subjectAlternativeNames"] = []interface{}{}
-		}
+		props["parameters"] = params
 	}
-	props["parameters"] = params
 	defaultString(props, "deploymentStatus", "NotStarted")
 	rec["properties"] = props
 
@@ -323,7 +325,7 @@ func secretResponse(parent, input, existing map[string]interface{}) map[string]i
 // parameters are echoed as supplied; each association domain is marked active
 // when the caller did not say otherwise, and the match patterns are preserved.
 func securityPolicyResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
-	rec := mergeMaps(existing, input)
+	rec := cloneInput(input)
 
 	props := cloneMap(mapVal(rec["properties"]))
 	if props == nil {

@@ -139,6 +139,14 @@ func TestFrontDoorCustomDomainAndAssociation(t *testing.T) {
 	expectStatus(t, resp, 201)
 	resp.Body.Close()
 
+	// Association cleanup is case-insensitive: r3 stores the same ARM ID with
+	// the domain name in a different case.
+	variantDomainID := "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Cdn/profiles/p1/customDomains/WWW"
+	resp = doRequest(t, "PUT", routes+"/r3"+frontDoorAPIVersion,
+		fmt.Sprintf(`{"properties":{"customDomains":[{"id":%q}]}}`, variantDomainID))
+	expectStatus(t, resp, 201)
+	resp.Body.Close()
+
 	for _, name := range []string{"r1", "r2"} {
 		resp = doRequest(t, "GET", routes+"/"+name+frontDoorAPIVersion, "")
 		expectStatus(t, resp, 200)
@@ -160,7 +168,7 @@ func TestFrontDoorCustomDomainAndAssociation(t *testing.T) {
 	expectStatus(t, resp, 202)
 	resp.Body.Close()
 
-	for _, name := range []string{"r1", "r2"} {
+	for _, name := range []string{"r1", "r2", "r3"} {
 		resp = doRequest(t, "GET", routes+"/"+name+frontDoorAPIVersion, "")
 		expectStatus(t, resp, 200)
 		route := decodeJSON(t, resp)

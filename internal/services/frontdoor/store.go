@@ -26,8 +26,8 @@ func profileKey(sub, rg, name string) string {
 	return "fd:" + sub + ":" + rg + ":profile:" + name
 }
 
-// rgPrefix returns the prefix covering every Front Door resource in a resource
-// group, across subscriptions and profiles.
+// rgPrefix returns the prefix covering every Front Door resource in one
+// subscription's resource group, across profiles.
 func rgPrefix(sub, rg string) string {
 	return "fd:" + sub + ":" + rg + ":"
 }
@@ -97,7 +97,7 @@ func removeCustomDomainFromRoutes(s *store.Store, sub, rg, profile, domainID str
 		kept := make([]interface{}, 0, len(domains))
 		removed := false
 		for _, domain := range domains {
-			if stringVal(mapVal(domain)["id"]) == domainID {
+			if strings.EqualFold(stringVal(mapVal(domain)["id"]), domainID) {
 				removed = true
 				continue
 			}
@@ -172,4 +172,13 @@ func cloneMap(m map[string]interface{}) map[string]interface{} {
 		out[k] = cloneValue(v)
 	}
 	return out
+}
+
+// cloneInput deep-copies an already-merged record for a computed builder. It
+// returns an empty map when input is nil so builders can assign safely.
+func cloneInput(input map[string]interface{}) map[string]interface{} {
+	if input == nil {
+		return map[string]interface{}{}
+	}
+	return cloneMap(input)
 }

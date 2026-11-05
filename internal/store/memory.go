@@ -178,7 +178,13 @@ func (s *Store) ListKeysByPrefix(prefix string) []string {
 	if mb, ok := s.backend.(*MemoryBackend); ok {
 		return mb.ListKeysByPrefix(prefix)
 	}
-	return s.backend.List()
+	keys := make([]string, 0)
+	for _, key := range s.backend.List() {
+		if strings.HasPrefix(key, prefix) {
+			keys = append(keys, key)
+		}
+	}
+	return keys
 }
 
 func (s *Store) CountByPrefix(prefix string) int {

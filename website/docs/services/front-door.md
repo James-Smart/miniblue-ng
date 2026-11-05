@@ -1,6 +1,6 @@
 # Front Door
 
-miniblue emulates the Azure Front Door Standard/Premium **control plane** under `Microsoft.Cdn/profiles`, plus the resource-group-scoped `Microsoft.Network/FrontDoorWebApplicationFirewallPolicies` resource. Profiles, endpoints, origins, routes, rules, custom domains, secrets, security policies and WAF policies can be created, read, updated, listed and deleted through ARM, so `azurerm_cdn_frontdoor_*` resources apply, refresh and destroy cleanly.
+miniblue emulates the Azure Front Door Standard/Premium **control plane** under `Microsoft.Cdn/profiles`, plus the resource-group-scoped `Microsoft.Network/FrontDoorWebApplicationFirewallPolicies` resource. Profiles, endpoints, origin groups, origins, routes, rule sets, rules, custom domains, secrets, security policies and WAF policies can be created, read, updated, listed and deleted through ARM, so `azurerm_cdn_frontdoor_*` resources apply, refresh and destroy cleanly.
 
 This is metadata emulation: no traffic is routed, no TLS certificate is issued and no WAF rule is evaluated. The responses carry the computed properties the `azurerm` provider reads back, so a plan immediately after an apply reports no drift.
 
@@ -111,7 +111,7 @@ defaults to `{}` and `provisioningState` is `Succeeded`.
 | Resource | Computed / defaulted values |
 |----------|-----------------------------|
 | Profile | `properties.frontDoorId` — a stable UUID generated once (the provider exposes it as `resource_guid`); `originResponseTimeoutSeconds` defaults to `60` |
-| Endpoint | `properties.hostName` — generated once as `<name>-<6 hex>.z01.azurefd.net` and preserved on every later read; `enabledState` defaults to `Enabled` |
+| Endpoint | `properties.hostName` — generated once as `<lowercased name>-<6 hex>.z01.azurefd.net` and preserved on every later read; `enabledState` defaults to `Enabled` |
 | Origin group | `healthProbeSettings` defaults (`/`, `HEAD`, `Http`, `30s`), `loadBalancingSettings` defaults (`4` samples, `3` required, `0 ms`), `sessionAffinityState` `Disabled`, traffic restoration `10` minutes |
 | Origin | `originHostHeader` defaults to `hostName`; ports `80`/`443`, `priority` `1`, `weight` `1000`, `enabledState` `Enabled`, `enforceCertificateNameCheck` `true` |
 | Route | `supportedProtocols` `["Https"]`, `patternsToMatch` `["/*"]`, `forwardingProtocol` `MatchRequest`, `linkToDefaultDomain` `Enabled`, `httpsRedirect` `Enabled`, `enabledState` `Enabled`, empty `customDomains` and `ruleSets` arrays; `endpointName` is filled from the parent endpoint |
@@ -119,7 +119,7 @@ defaults to `{}` and `provisioningState` is `Succeeded`.
 | Custom domain | `validationProperties.validationToken` — 32 lowercase hex characters, generated once; `expirationDate` — create time plus 7 days; `validationState` and `domainValidationState` — `Pending` |
 | Secret | `CustomerCertificate` secrets get an `expirationDate` and an empty `subjectAlternativeNames` array when omitted |
 | Security policy | Every association domain is stamped `isActive: true` when the caller did not supply it |
-| WAF policy | `location` `Global`; `policySettings` defaults (`enabledState` `Enabled`, `mode` `Prevention`, `requestBodyCheck` `Enabled`); `customRules.rules` defaults to `[]`; `frontendEndpointLinks` defaults to `[]` |
+| WAF policy | `location` `Global`; `policySettings` defaults (`enabledState` `Enabled`, `mode` `Prevention`, `requestBodyCheck` `Enabled`); `customRules.rules` defaults to `[]`; `frontendEndpointLinks` is always `[]` |
 
 Generated values are persisted, not recomputed. Repeated `GET`s, `PATCH`es and
 full-model `PUT`s return the same host name, Front Door ID, validation token and
@@ -145,6 +145,7 @@ The `azurerm` provider resources for this surface are:
 - `azurerm_cdn_frontdoor_rule_set`
 - `azurerm_cdn_frontdoor_rule`
 - `azurerm_cdn_frontdoor_custom_domain`
+- `azurerm_cdn_frontdoor_secret`
 - `azurerm_cdn_frontdoor_security_policy`
 - `azurerm_cdn_frontdoor_firewall_policy`
 

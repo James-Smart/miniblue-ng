@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 )
@@ -159,4 +161,45 @@ func TestStore_StartAutoSave_NoOp_MemoryBackend(t *testing.T) {
 	// Should not panic and stop should be callable
 	time.Sleep(20 * time.Millisecond)
 	stop()
+}
+
+func TestEscapeLikePrefix(t *testing.T) {
+	cases := map[string]string{
+		"fd:sub1:rg_a:": `fd:sub1:rg\_a:`,
+		"fd:sub1:rg%x:": `fd:sub1:rg\%x:`,
+		`fd:sub1:rg\x:`: `fd:sub1:rg\\x:`,
+		"plain:prefix:": "plain:prefix:",
+	}
+	for in, want := range cases {
+		if got := escapeLikePrefix(in); got != want {
+			t.Errorf("escapeLikePrefix(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestStore_ListKeysByPrefix_FileBackend(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	s := NewWithBackend(NewFileBackend(path))
+
+	seed := map[string]string{
+		"fd:sub1:rg1:endpoint:p1:e1":  "one",
+		"fd:sub1:rg1:endpoint:p1:e2":  "two",
+		"fd:sub1:rg1:endpoint:p10:e3": "sibling profile",
+		"fd:sub1:rg2:endpoint:p1:e4":  "other rg",
+		"fd:sub1:rg1:route:p1:e1:r1":  "other kind",
+		"unrelated:key":               "unrelated",
+	}
+	for key, value := range seed {
+		s.Set(key, value)
+	}
+
+	got := s.ListKeysByPrefix("fd:sub1:rg1:endpoint:p1:")
+	sort.Strings(got)
+	want := []string{
+		"fd:sub1:rg1:endpoint:p1:e1",
+		"fd:sub1:rg1:endpoint:p1:e2",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ListKeysByPrefix over file backend = %v, want %v", got, want)
+	}
 }

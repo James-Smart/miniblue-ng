@@ -93,8 +93,8 @@ func (p *PostgresBackend) List() []string {
 
 func (p *PostgresBackend) ListByPrefix(prefix string) []interface{} {
 	rows, err := p.db.Query(
-		`SELECT value FROM miniblue_store WHERE key LIKE $1`,
-		prefix+"%",
+		`SELECT value FROM miniblue_store WHERE key LIKE $1 ESCAPE '\'`,
+		escapeLikePrefix(prefix)+"%",
 	)
 	if err != nil {
 		return []interface{}{}
@@ -117,11 +117,9 @@ func (p *PostgresBackend) ListByPrefix(prefix string) []interface{} {
 
 func (p *PostgresBackend) CountByPrefix(prefix string) int {
 	var count int
-	// Escape LIKE wildcards in the prefix itself.
-	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(prefix)
 	err := p.db.QueryRow(
-		`SELECT COUNT(*) FROM miniblue_store WHERE key LIKE $1`,
-		escaped+"%",
+		`SELECT COUNT(*) FROM miniblue_store WHERE key LIKE $1 ESCAPE '\'`,
+		escapeLikePrefix(prefix)+"%",
 	).Scan(&count)
 	if err != nil {
 		return 0
@@ -140,8 +138,8 @@ func (p *PostgresBackend) Exists(key string) bool {
 
 func (p *PostgresBackend) DeleteByPrefix(prefix string) int {
 	result, err := p.db.Exec(
-		`DELETE FROM miniblue_store WHERE key LIKE $1`,
-		prefix+"%",
+		`DELETE FROM miniblue_store WHERE key LIKE $1 ESCAPE '\'`,
+		escapeLikePrefix(prefix)+"%",
 	)
 	if err != nil {
 		return 0
@@ -152,4 +150,10 @@ func (p *PostgresBackend) DeleteByPrefix(prefix string) int {
 
 func (p *PostgresBackend) Reset() {
 	_, _ = p.db.Exec(`TRUNCATE miniblue_store`)
+}
+
+// escapeLikePrefix escapes LIKE metacharacters so a literal key prefix cannot
+// match unrelated keys (for example "a_b" must not match "axb").
+func escapeLikePrefix(prefix string) string {
+	return strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(prefix)
 }
