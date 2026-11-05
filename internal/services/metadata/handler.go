@@ -3,9 +3,9 @@ package metadata
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/moabukar/miniblue/internal/endpoints"
 	"github.com/moabukar/miniblue/internal/store"
 )
 
@@ -23,18 +23,14 @@ func (h *Handler) Register(r chi.Router) {
 }
 
 func (h *Handler) Endpoints(w http.ResponseWriter, r *http.Request) {
-	httpPort := os.Getenv("PORT")
-	if httpPort == "" {
-		httpPort = "4566"
-	}
-	httpBase := "http://localhost:" + httpPort
+	httpBase := endpoints.HTTPBase()
 
 	// This MUST match the metaDataResponse struct in:
 	// github.com/hashicorp/go-azure-sdk/sdk/internal/metadata/client.go
 	// The azurerm Terraform provider unmarshals this response using those exact JSON tags.
 	endpoints := map[string]interface{}{
-		"name":    "AzureCloud",
-		"portal":  httpBase,
+		"name":   "AzureCloud",
+		"portal": httpBase,
 		"authentication": map[string]interface{}{
 			"loginEndpoint":    httpBase,
 			"audiences":        []string{httpBase},
@@ -50,7 +46,7 @@ func (h *Handler) Endpoints(w http.ResponseWriter, r *http.Request) {
 			"sqlServerHostname":                   "localhost",
 			"azureDataLakeAnalyticsCatalogAndJob": "localhost",
 			"keyVaultDns":                         "localhost",
-			"storage":                             "localhost:" + httpPort,
+			"storage":                             endpoints.StorageSuffix(),
 			"azureFrontDoorEndpointSuffix":        "localhost",
 			"storageSyncEndpointSuffix":           "localhost",
 			"mhsmDns":                             "localhost",

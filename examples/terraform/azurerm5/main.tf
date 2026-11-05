@@ -4,6 +4,7 @@
 #   - camel-case /resourceGroups routes
 #   - public IP dnsSettings.fqdn derived from domain_name_label
 #   - storage account accountMigrations/default read-back
+#   - storage container read-back using the metadata storage suffix
 #   - Key Vault ARM vault CRUD (including soft-delete purge on destroy)
 #
 # Run against miniblue:
@@ -36,6 +37,12 @@ resource "azurerm_storage_account" "example" {
   account_replication_type = "LRS"
 }
 
+resource "azurerm_storage_container" "example" {
+  name                  = "miniblue-container"
+  storage_account_id    = azurerm_storage_account.example.id
+  container_access_type = "private"
+}
+
 resource "azurerm_key_vault" "example" {
   name                = "miniblue-az5-kv"
   location            = azurerm_resource_group.example.location
@@ -53,4 +60,8 @@ resource "azurerm_key_vault" "example" {
 
 output "public_ip_fqdn" {
   value = azurerm_public_ip.example.fqdn
+}
+
+output "container_url" {
+  value = azurerm_storage_container.example.url
 }

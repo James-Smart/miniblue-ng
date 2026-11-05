@@ -111,7 +111,8 @@ func (h *Handler) DeleteContainerARM(w http.ResponseWriter, r *http.Request) {
 		writeServiceNotFound(w, "Microsoft.Storage/storageAccounts/blobServices/containers", name)
 		return
 	}
-	w.WriteHeader(http.StatusAccepted)
+	// azurerm 5.x expects the synchronous container delete to return 204.
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) ListContainersARM(w http.ResponseWriter, r *http.Request) {

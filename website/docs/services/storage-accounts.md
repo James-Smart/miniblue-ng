@@ -18,6 +18,32 @@ azurerm 5.x reads `accountMigrations/default` after fetching a storage account.
 miniblue returns a completed migration record whose `targetSkuName` matches the
 account SKU, so the read-back succeeds without a real migration.
 
+## Endpoint suffix
+
+Storage account endpoints use the same host suffix that
+`/metadata/endpoints` advertises under `suffixes.storage`:
+
+```text
+https://{accountName}.blob.localhost:4566/
+https://{accountName}.queue.localhost:4566/
+https://{accountName}.table.localhost:4566/
+https://{accountName}.file.localhost:4566/
+```
+
+The suffix follows `PORT`. azurerm 5.x parses these endpoints using the
+metadata suffix when reading a container back, so keeping them aligned is
+required for `azurerm_storage_container` read and destroy.
+
+Set `MINIBLUE_STORAGE_ENDPOINT` to switch to path-style local endpoints for
+direct data-plane SDK testing.
+
+## Containers
+
+ARM blob-container CRUD is available under
+`.../storageAccounts/{account}/blobServices/default/containers/{container}`.
+`DELETE` returns `204`, matching what azurerm 5.x expects for
+`azurerm_storage_container` destroy.
+
 ## Create a storage account
 
 ```bash

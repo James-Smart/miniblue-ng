@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/moabukar/miniblue/internal/azerr"
+	"github.com/moabukar/miniblue/internal/endpoints"
 	"github.com/moabukar/miniblue/internal/storageauth"
 	"github.com/moabukar/miniblue/internal/store"
 )
@@ -267,10 +268,11 @@ func (h *Handler) buildStorageAccountResponse(sub, rg, name string) map[string]i
 		tableEndpoint = localEndpoint + "/table/" + name + "/"
 		fileEndpoint = localEndpoint + "/file/" + name + "/"
 	} else {
-		blobEndpoint = "https://" + name + ".blob.core.windows.net/"
-		queueEndpoint = "https://" + name + ".queue.core.windows.net/"
-		tableEndpoint = "https://" + name + ".table.core.windows.net/"
-		fileEndpoint = "https://" + name + ".file.core.windows.net/"
+		suffix := endpoints.StorageSuffix()
+		blobEndpoint = "https://" + name + ".blob." + suffix + "/"
+		queueEndpoint = "https://" + name + ".queue." + suffix + "/"
+		tableEndpoint = "https://" + name + ".table." + suffix + "/"
+		fileEndpoint = "https://" + name + ".file." + suffix + "/"
 	}
 
 	return map[string]interface{}{

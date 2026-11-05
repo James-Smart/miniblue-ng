@@ -194,7 +194,7 @@ func TestBlobARMContainerCRUD(t *testing.T) {
 	// Delete container
 	resp4 := doRequest(t, "DELETE", cBase, "")
 	defer resp4.Body.Close()
-	expectStatus(t, resp4, 202)
+	expectStatus(t, resp4, 204)
 
 	resp5 := doRequest(t, "GET", cBase, "")
 	defer resp5.Body.Close()
@@ -222,13 +222,19 @@ func TestBlobARMPrimaryEndpointFormat(t *testing.T) {
 	acctName := "endpttestacct"
 	base := blobARMBase(ts) + "/" + acctName
 
+	metaResp := doRequest(t, "GET", ts.URL+"/metadata/endpoints", "")
+	meta := decodeJSON(t, metaResp)
+	metaResp.Body.Close()
+	suffixes := meta["suffixes"].(map[string]interface{})
+	storageSuffix, _ := suffixes["storage"].(string)
+
 	resp := doRequest(t, "PUT", base, `{}`)
 	defer resp.Body.Close()
 	m := decodeJSON(t, resp)
 	props := m["properties"].(map[string]interface{})
 	endpoints := props["primaryEndpoints"].(map[string]interface{})
 
-	expected := "https://" + acctName + ".blob.core.windows.net/"
+	expected := "https://" + acctName + ".blob." + storageSuffix + "/"
 	if endpoints["blob"] != expected {
 		t.Fatalf("expected blob endpoint=%s, got %v", expected, endpoints["blob"])
 	}
@@ -393,12 +399,20 @@ func TestStorageAccountsServiceWithoutBlobDataPlane(t *testing.T) {
 	expectStatus(t, br, 404)
 }
 
-func TestStorageLocalEndpointsDisabled(t *testing.T) {
-	t.Setenv("MINIBLUE_STORAGE_ENDPOINTS", "")
+func TestStorageDefaultEndpointsUseMetadataSuffix(t *testing.T) {
 	ts := setupServer()
 	defer ts.Close()
 	acctName := "azureendpointsacct"
 	base := blobARMBase(ts) + "/" + acctName
+
+	metaResp := doRequest(t, "GET", ts.URL+"/metadata/endpoints", "")
+	meta := decodeJSON(t, metaResp)
+	metaResp.Body.Close()
+	suffixes := meta["suffixes"].(map[string]interface{})
+	storageSuffix, _ := suffixes["storage"].(string)
+	if storageSuffix == "" {
+		t.Fatal("metadata did not advertise a storage suffix")
+	}
 
 	resp := doRequest(t, "PUT", base, `{}`)
 	defer resp.Body.Close()
@@ -406,21 +420,44 @@ func TestStorageLocalEndpointsDisabled(t *testing.T) {
 	props := m["properties"].(map[string]interface{})
 	endpoints := props["primaryEndpoints"].(map[string]interface{})
 
-	expectedBlob := "https://" + acctName + ".blob.core.windows.net/"
+	expected := map[string]string{
+		"blob":  "https://" + acctName + ".blob." + storageSuffix + "/",
+		"queue": "https://" + acctName + ".queue." + storageSuffix + "/",
+		"table": "https://" + acctName + ".table." + storageSuffix + "/",
+		"file":  "https://" + acctName + ".file." + storageSuffix + "/",
+	}
+	for service, want := range expected {
+		if endpoints[service] != want {
+			t.Errorf("expected %s endpoint=%s, got %v", service, want, endpoints[service])
+		}
+	}
+}
+
+func TestStorageDefaultEndpointsFollowConfiguredPort(t *testing.T) {
+	t.Setenv("PORT", "8080")
+	ts := setupServer()
+	defer ts.Close()
+	acctName := "portendpointsacct"
+	base := blobARMBase(ts) + "/" + acctName
+
+	metaResp := doRequest(t, "GET", ts.URL+"/metadata/endpoints", "")
+	meta := decodeJSON(t, metaResp)
+	metaResp.Body.Close()
+	suffixes := meta["suffixes"].(map[string]interface{})
+	storageSuffix, _ := suffixes["storage"].(string)
+	if storageSuffix != "localhost:8080" {
+		t.Fatalf("expected metadata storage suffix=localhost:8080, got %q", storageSuffix)
+	}
+
+	resp := doRequest(t, "PUT", base, `{}`)
+	defer resp.Body.Close()
+	m := decodeJSON(t, resp)
+	props := m["properties"].(map[string]interface{})
+	endpoints := props["primaryEndpoints"].(map[string]interface{})
+
+	expectedBlob := "https://" + acctName + ".blob." + storageSuffix + "/"
 	if endpoints["blob"] != expectedBlob {
 		t.Fatalf("expected blob endpoint=%s, got %v", expectedBlob, endpoints["blob"])
-	}
-	expectedQueue := "https://" + acctName + ".queue.core.windows.net/"
-	if endpoints["queue"] != expectedQueue {
-		t.Fatalf("expected queue endpoint=%s, got %v", expectedQueue, endpoints["queue"])
-	}
-	expectedTable := "https://" + acctName + ".table.core.windows.net/"
-	if endpoints["table"] != expectedTable {
-		t.Fatalf("expected table endpoint=%s, got %v", expectedTable, endpoints["table"])
-	}
-	expectedFile := "https://" + acctName + ".file.core.windows.net/"
-	if endpoints["file"] != expectedFile {
-		t.Fatalf("expected file endpoint=%s, got %v", expectedFile, endpoints["file"])
 	}
 }
 

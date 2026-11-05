@@ -14,7 +14,15 @@ miniblue works with zero configuration out of the box. This page covers everythi
 | `DATABASE_URL` | _(unset)_ | PostgreSQL connection string for persistent storage |
 | `MINIBLUE_STORAGE_ENDPOINT` | _(unset)_ | Overrides storage account data-plane endpoints to point to local server (enables SDK/data-plane testing) |
 
-When set, storage accounts return local endpoints (e.g., `http://localhost:4566/blob/{accountName}/`) instead of real Azure endpoints (e.g., `https://{accountName}.blob.core.windows.net/`). This allows SDKs and tools to connect directly to miniblue's local blob/queue/table/file services for data-plane testing.
+By default, storage account endpoints use the host suffix advertised by
+`/metadata/endpoints`, for example `https://{accountName}.blob.localhost:4566/`.
+Changing `PORT` changes both the metadata suffix and these endpoints together.
+
+When `MINIBLUE_STORAGE_ENDPOINT` is set, storage accounts instead return
+path-style local endpoints (for example
+`http://localhost:4566/blob/{accountName}/`). This allows SDKs and tools to
+connect directly to miniblue's local blob/queue/table/file services for
+data-plane testing.
 
 Example -- run on custom ports:
 

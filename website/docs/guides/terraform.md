@@ -111,7 +111,8 @@ provider "azurerm" {
 
 `examples/terraform/azurerm5` exercises the 5.x compatibility paths:
 camel-case resource-group routes, public IP FQDN derivation, storage-account
-migration-status read-back, and Key Vault ARM CRUD with soft-delete purge.
+migration-status read-back, storage-container read-back using the metadata
+suffix, and Key Vault ARM CRUD with soft-delete purge.
 
 ## Step 3: Full example
 
