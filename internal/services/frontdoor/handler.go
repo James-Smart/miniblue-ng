@@ -62,6 +62,28 @@ func (h *Handler) Register(r chi.Router) {
 					})
 				})
 			})
+
+			r.Route("/ruleSets", func(r chi.Router) {
+				ruleSets := &nested{store: h.store, spec: ruleSetSpec}
+				r.Get("/", ruleSets.list)
+				r.Route("/{ruleSetName}", func(r chi.Router) {
+					r.Put("/", ruleSets.create)
+					r.Get("/", ruleSets.get)
+					r.Patch("/", ruleSets.patch)
+					r.Delete("/", ruleSets.delete)
+
+					r.Route("/rules", func(r chi.Router) {
+						rules := &nested{store: h.store, spec: ruleSpec}
+						r.Get("/", rules.list)
+						r.Route("/{ruleName}", func(r chi.Router) {
+							r.Put("/", rules.create)
+							r.Get("/", rules.get)
+							r.Patch("/", rules.patch)
+							r.Delete("/", rules.delete)
+						})
+					})
+				})
+			})
 		})
 	})
 	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Cdn/profiles", h.ListInSubscription)

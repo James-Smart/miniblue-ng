@@ -11,6 +11,8 @@ const (
 	endpointType    = "Microsoft.Cdn/profiles/afdEndpoints"
 	originGroupType = "Microsoft.Cdn/profiles/originGroups"
 	originType      = "Microsoft.Cdn/profiles/originGroups/origins"
+	ruleSetType     = "Microsoft.Cdn/profiles/ruleSets"
+	ruleType        = "Microsoft.Cdn/profiles/ruleSets/rules"
 )
 
 // profileResponse builds the full profile response. It merges input over the
@@ -155,6 +157,44 @@ func originResponse(parent, input, existing map[string]interface{}) map[string]i
 	if _, ok := props["enforceCertificateNameCheck"]; !ok {
 		props["enforceCertificateNameCheck"] = true
 	}
+	rec["properties"] = props
+
+	return rec
+}
+
+// ruleSetResponse builds a rule set response. Rule sets carry only the common
+// computed properties.
+func ruleSetResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+	defaultString(props, "deploymentStatus", "NotStarted")
+	rec["properties"] = props
+
+	return rec
+}
+
+// ruleResponse builds a rule response. Conditions and actions are opaque: they
+// are echoed exactly as supplied, without validating their shape.
+func ruleResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	defaultString(props, "matchProcessingBehavior", "Continue")
+	if _, ok := props["conditions"]; !ok {
+		props["conditions"] = []interface{}{}
+	}
+	if _, ok := props["actions"]; !ok {
+		props["actions"] = []interface{}{}
+	}
+	defaultString(props, "deploymentStatus", "NotStarted")
 	rec["properties"] = props
 
 	return rec

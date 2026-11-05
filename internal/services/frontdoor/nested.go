@@ -305,3 +305,24 @@ var originSpec = resourceSpec{
 	parents:  []string{"profileName", "originGroupName"},
 	computed: originResponse,
 }
+
+// ruleSetSpec is the rule set child of a profile.
+var ruleSetSpec = resourceSpec{
+	kind:     "ruleSet",
+	keyKind:  "ruleset",
+	segment:  "ruleSets",
+	armType:  ruleSetType,
+	parents:  []string{"profileName"},
+	computed: ruleSetResponse,
+	children: []string{"rule"},
+}
+
+// ruleSpec is the rule child of a rule set.
+var ruleSpec = resourceSpec{
+	kind:     "rule",
+	keyKind:  "rule",
+	segment:  "rules",
+	armType:  ruleType,
+	parents:  []string{"profileName", "ruleSetName"},
+	computed: ruleResponse,
+}
