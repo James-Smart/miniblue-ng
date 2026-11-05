@@ -223,6 +223,11 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 			azerr.WriteError(w, http.StatusNotFound, "DiskNotFound", missing.Error())
 			return
 		}
+		var inUse *diskInUseError
+		if errors.As(err, &inUse) {
+			azerr.WriteError(w, http.StatusConflict, "DiskInUse", inUse.Error())
+			return
+		}
 		azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}

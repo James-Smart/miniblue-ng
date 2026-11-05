@@ -25,6 +25,17 @@ func (e *diskNotFoundError) Error() string {
 	return "The disk '" + e.id + "' could not be found."
 }
 
+// diskInUseError reports an explicit managed-disk ID that is already attached to
+// a different virtual machine.
+type diskInUseError struct {
+	id        string
+	managedBy string
+}
+
+func (e *diskInUseError) Error() string {
+	return "Disk '" + e.id + "' is already attached to virtual machine '" + e.managedBy + "'."
+}
+
 // ensureOSDisk makes sure the VM has an attached OS disk. An explicit
 // `storageProfile.osDisk.managedDisk.id` must resolve to an existing disk,
 // which is attached without transferring ownership. Otherwise a managed disk is
@@ -52,6 +63,10 @@ func (h *Handler) ensureOSDisk(rec map[string]interface{}) error {
 			diskRec, found := disks.Get(h.store, dsub, drg, dname)
 			if !found {
 				return &diskNotFoundError{id: id}
+			}
+			diskProps, _ := diskRec["properties"].(map[string]interface{})
+			if managedBy := asString(diskProps["managedBy"]); managedBy != "" && managedBy != vmID {
+				return &diskInUseError{id: id, managedBy: managedBy}
 			}
 			// Ownership stays with the disk resource; only link it.
 			if !disks.Attach(h.store, dsub, drg, dname, vmID) {

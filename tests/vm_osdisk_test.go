@@ -256,3 +256,58 @@ func TestVMOSDiskAttachExisting(t *testing.T) {
 		t.Fatalf("expected DiskNotFound, got %s", e.Error.Code)
 	}
 }
+
+// TestVMOSDiskRejectsDiskAttachedToAnotherVM verifies that an explicit OS disk
+// already attached to one VM cannot be attached to a second VM: the create is
+// rejected with 409 DiskInUse, the second VM is not stored, and the disk stays
+// attached to its original VM.
+func TestVMOSDiskRejectsDiskAttachedToAnotherVM(t *testing.T) {
+	ts := setupVMServer(t)
+	defer ts.Close()
+	createRG(t, ts, "sub1", "rg1")
+
+	resp := doRequest(t, "PUT", diskBase(ts.URL)+"/shared"+diskAPIVersion,
+		`{"location":"eastus","sku":{"name":"Premium_LRS"},"properties":{"diskSizeGB":128,"creationData":{"createOption":"Empty"}}}`)
+	expectStatus(t, resp, 201)
+	disk := decodeJSON(t, resp)
+	resp.Body.Close()
+	diskID, _ := disk["id"].(string)
+	if diskID == "" {
+		t.Fatal("expected pre-created disk id")
+	}
+
+	body := `{"location":"eastus","properties":{
+		"storageProfile":{"osDisk":{"managedDisk":{"id":"` + diskID + `"}}}
+	}}`
+	resp = doRequest(t, "PUT", vmURL(ts, "sub1", "rg1", "vm-a")+vmAV, body)
+	expectStatus(t, resp, 201)
+	vmA := decodeJSON(t, resp)
+	resp.Body.Close()
+	vmAID := vmA["properties"].(map[string]interface{})["vmId"].(string)
+
+	resp = doRequest(t, "PUT", vmURL(ts, "sub1", "rg1", "vm-b")+vmAV, body)
+	expectStatus(t, resp, 409)
+	e := decodeError(t, resp)
+	resp.Body.Close()
+	if e.Error.Code != "DiskInUse" {
+		t.Fatalf("expected DiskInUse, got %s", e.Error.Code)
+	}
+
+	// The rejected VM must not exist.
+	resp = doRequest(t, "GET", vmURL(ts, "sub1", "rg1", "vm-b")+vmAV, "")
+	expectStatus(t, resp, 404)
+	resp.Body.Close()
+
+	// The disk must still belong to the first VM.
+	resp = doRequest(t, "GET", ts.URL+diskID+diskAPIVersion, "")
+	expectStatus(t, resp, 200)
+	disk = decodeJSON(t, resp)
+	resp.Body.Close()
+	diskProps := disk["properties"].(map[string]interface{})
+	if diskProps["managedBy"] != vmAID {
+		t.Fatalf("expected disk to stay attached to %q, got %v", vmAID, diskProps["managedBy"])
+	}
+	if diskProps["diskState"] != "Attached" {
+		t.Fatalf("expected diskState Attached, got %v", diskProps["diskState"])
+	}
+}
