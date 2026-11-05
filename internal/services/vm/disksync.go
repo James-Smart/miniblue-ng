@@ -266,13 +266,44 @@ func (h *Handler) detachDiskByID(id, vmID string) {
 	disks.Detach(h.store, sub, rg, name)
 }
 
+// validateDataDisksForVM checks that every explicit data-disk managed-disk ID
+// in rec either resolves to a disk that is free or already belongs to vmID, or
+// refers to a disk that does not exist yet (syncDataDisks creates it). It never
+// mutates the VM or any disk record.
+func (h *Handler) validateDataDisksForVM(rec map[string]interface{}, vmID string) error {
+	for _, entry := range dataDiskEntries(rec) {
+		id := dataDiskManagedDiskID(entry)
+		if id == "" {
+			continue
+		}
+		sub, rg, name, ok := disks.ParseID(id)
+		if !ok {
+			return &diskNotFoundError{id: id}
+		}
+		diskRec, found := disks.Get(h.store, sub, rg, name)
+		if !found {
+			continue
+		}
+		diskProps, _ := diskRec["properties"].(map[string]interface{})
+		if managedBy := asString(diskProps["managedBy"]); managedBy != "" && managedBy != vmID {
+			return &diskInUseError{id: id, managedBy: managedBy}
+		}
+	}
+	return nil
+}
+
 // syncDataDisks reconciles storageProfile.dataDisks with managed-disk
 // attachments. Disks referenced by the new record are created when missing and
 // attached to the VM; disks that were referenced before but are gone from the
-// new record are detached. The OS disk is never touched.
-func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface{}) {
+// new record are detached. The OS disk is never touched. The new record is
+// validated up front so a rejected attachment cannot partially attach or create
+// any disk.
+func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface{}) error {
 	if vmID == "" {
-		return
+		return nil
+	}
+	if err := h.validateDataDisksForVM(newRec, vmID); err != nil {
+		return err
 	}
 
 	oldIDs := make(map[string]bool)
@@ -292,7 +323,7 @@ func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface
 
 		sub, rg, name, ok := disks.ParseID(id)
 		if !ok {
-			continue
+			return &diskNotFoundError{id: id}
 		}
 		diskRec, found := disks.Get(h.store, sub, rg, name)
 		if !found {
@@ -302,7 +333,7 @@ func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface
 		diskProps, _ := diskRec["properties"].(map[string]interface{})
 		if managedBy := asString(diskProps["managedBy"]); managedBy != "" && managedBy != vmID {
 			// Never steal a disk attached to another VM.
-			continue
+			return &diskInUseError{id: id, managedBy: managedBy}
 		}
 		disks.Attach(h.store, sub, rg, name, vmID)
 	}
@@ -313,6 +344,7 @@ func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface
 		}
 		h.detachDiskByID(id, vmID)
 	}
+	return nil
 }
 
 // dataDiskEntries returns the VM record's storageProfile.dataDisks entries as

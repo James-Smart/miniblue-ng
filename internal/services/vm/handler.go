@@ -195,21 +195,22 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 	rec["_networkName"] = vmNetworkName(rg, name)
 	appendProvisionEvent(rec, "virtual machine created (image %s)", image)
 
-	if err := h.ensureOSDisk(rec); err != nil {
-		var missing *diskNotFoundError
-		if errors.As(err, &missing) {
-			azerr.WriteError(w, http.StatusNotFound, "DiskNotFound", missing.Error())
-			return
-		}
-		var inUse *diskInUseError
-		if errors.As(err, &inUse) {
-			azerr.WriteError(w, http.StatusConflict, "DiskInUse", inUse.Error())
-			return
-		}
-		azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+	if err := h.validateDataDisksForVM(rec, asString(getProps(rec)["vmId"])); err != nil {
+		writeDiskError(w, err)
 		return
 	}
-	h.syncDataDisks(asString(getProps(rec)["vmId"]), nil, rec)
+	if err := h.ensureOSDisk(rec); err != nil {
+		if !writeDiskError(w, err) {
+			azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		}
+		return
+	}
+	if err := h.syncDataDisks(asString(getProps(rec)["vmId"]), nil, rec); err != nil {
+		if !writeDiskError(w, err) {
+			azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		}
+		return
+	}
 	getProps(rec)["instanceView"] = instanceViewFor(rec)
 	appendProvisionEvent(rec, "OS disk %s attached", osDiskName(rec))
 
@@ -333,6 +334,11 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 	}
 
 	merged := mergeMaps(rec, patch)
+	// Data-disk references are validated before mutating the stored record, so
+	// a rejected attachment leaves the VM and every disk untouched.
+	if err := h.validateDataDisksForVM(merged, vmID); err != nil {
+		return err
+	}
 	replaceRecord(rec, merged)
 	props := getProps(rec)
 	if asString(props["vmId"]) == "" {
@@ -364,23 +370,34 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 		restoreOSDiskBlock(rec, oldOSDisk)
 	}
 
-	h.syncDataDisks(asString(getProps(rec)["vmId"]), oldRec, rec)
+	if err := h.syncDataDisks(asString(getProps(rec)["vmId"]), oldRec, rec); err != nil {
+		return err
+	}
 
 	h.refreshVM(rec)
 	appendProvisionEvent(rec, "virtual machine updated")
 	return nil
 }
 
-// writeUpdateError maps update failures onto ARM error responses.
-func (h *Handler) writeUpdateError(w http.ResponseWriter, err error) {
+// writeDiskError writes the ARM response for a managed-disk validation error
+// and reports whether it handled err. Unrelated errors are left to the caller.
+func writeDiskError(w http.ResponseWriter, err error) bool {
 	var missing *diskNotFoundError
 	if errors.As(err, &missing) {
 		azerr.WriteError(w, http.StatusNotFound, "DiskNotFound", missing.Error())
-		return
+		return true
 	}
 	var inUse *diskInUseError
 	if errors.As(err, &inUse) {
 		azerr.WriteError(w, http.StatusConflict, "DiskInUse", inUse.Error())
+		return true
+	}
+	return false
+}
+
+// writeUpdateError maps update failures onto ARM error responses.
+func (h *Handler) writeUpdateError(w http.ResponseWriter, err error) {
+	if writeDiskError(w, err) {
 		return
 	}
 	azerr.BadRequest(w, err.Error())
