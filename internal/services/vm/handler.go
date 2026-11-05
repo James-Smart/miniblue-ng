@@ -65,6 +65,15 @@ func (h *Handler) Register(r chi.Router) {
 					r.Delete("/", h.DeleteService)
 				})
 			})
+			r.Route("/extensions", func(r chi.Router) {
+				r.Get("/", h.ListExtensions)
+				r.Route("/{extensionName}", func(r chi.Router) {
+					r.Put("/", h.CreateOrUpdateExtension)
+					r.Get("/", h.GetExtension)
+					r.Patch("/", h.PatchExtension)
+					r.Delete("/", h.DeleteExtension)
+				})
+			})
 		})
 	})
 	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Compute/virtualMachines", h.ListAllVMs)
