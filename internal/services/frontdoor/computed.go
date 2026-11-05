@@ -20,6 +20,7 @@ const (
 	customDomainType   = "Microsoft.Cdn/profiles/customDomains"
 	secretType         = "Microsoft.Cdn/profiles/secrets"
 	securityPolicyType = "Microsoft.Cdn/profiles/securityPolicies"
+	wafPolicyType      = "Microsoft.Network/FrontDoorWebApplicationFirewallPolicies"
 )
 
 // profileResponse builds the full profile response. It merges input over the
@@ -352,6 +353,54 @@ func securityPolicyResponse(parent, input, existing map[string]interface{}) map[
 		}
 	}
 	props["parameters"] = params
+	rec["properties"] = props
+
+	return rec
+}
+
+// wafPolicyResponse builds a Front Door WAF policy response. WAF policies are
+// provided by Microsoft.Network rather than Microsoft.Cdn, so they carry their
+// own envelope and a smaller set of computed properties. Policy settings are
+// merged over the Azure defaults, custom rules default to an empty rule list,
+// and managed rules are echoed only when the caller supplied them (Premium
+// SKU). The frontend endpoint links array is always present.
+func wafPolicyResponse(sub, rg, name string, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	rec["id"] = "/subscriptions/" + sub + "/resourceGroups/" + rg +
+		"/providers/Microsoft.Network/FrontDoorWebApplicationFirewallPolicies/" + name
+	rec["name"] = name
+	rec["type"] = wafPolicyType
+	rec["location"] = "Global"
+	if tags, ok := rec["tags"].(map[string]interface{}); !ok || tags == nil {
+		rec["tags"] = map[string]interface{}{}
+	}
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	settings := cloneMap(mapVal(props["policySettings"]))
+	if settings == nil {
+		settings = map[string]interface{}{}
+	}
+	defaultString(settings, "enabledState", "Enabled")
+	defaultString(settings, "mode", "Prevention")
+	defaultString(settings, "requestBodyCheck", "Enabled")
+	props["policySettings"] = settings
+
+	customRules := cloneMap(mapVal(props["customRules"]))
+	if customRules == nil {
+		customRules = map[string]interface{}{}
+	}
+	if _, ok := customRules["rules"]; !ok {
+		customRules["rules"] = []interface{}{}
+	}
+	props["customRules"] = customRules
+
+	props["frontendEndpointLinks"] = []interface{}{}
+	props["provisioningState"] = "Succeeded"
 	rec["properties"] = props
 
 	return rec

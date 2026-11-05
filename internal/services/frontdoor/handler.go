@@ -131,6 +131,8 @@ func (h *Handler) Register(r chi.Router) {
 		})
 	})
 	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Cdn/profiles", h.ListInSubscription)
+
+	h.registerWAFPolicyRoutes(r)
 }
 
 // ---------- profile handlers ----------
