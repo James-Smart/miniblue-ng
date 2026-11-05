@@ -1,8 +1,15 @@
 package frontdoor
 
-import "github.com/google/uuid"
+import (
+	"strings"
 
-const profileType = "Microsoft.Cdn/profiles"
+	"github.com/google/uuid"
+)
+
+const (
+	profileType  = "Microsoft.Cdn/profiles"
+	endpointType = "Microsoft.Cdn/profiles/afdEndpoints"
+)
 
 // profileResponse builds the full profile response. It merges input over the
 // existing record, then fills in the ARM envelope and the computed properties
@@ -44,4 +51,38 @@ func profileResponse(sub, rg, name string, input, existing map[string]interface{
 	rec["properties"] = props
 
 	return rec
+}
+
+// endpointResponse builds an AFD endpoint response. The host name is generated
+// once at create time and preserved from the existing record on updates.
+func endpointResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	hostName := stringVal(mapVal(existing["properties"])["hostName"])
+	if hostName == "" {
+		hostName = generatedEndpointHostName(stringVal(rec["name"]))
+	}
+	props["hostName"] = hostName
+
+	if stringVal(props["enabledState"]) == "" {
+		props["enabledState"] = "Enabled"
+	}
+	if stringVal(props["deploymentStatus"]) == "" {
+		props["deploymentStatus"] = "NotStarted"
+	}
+	rec["properties"] = props
+
+	return rec
+}
+
+// generatedEndpointHostName returns the stable-looking Azure Front Door host
+// name for an endpoint: <lowercased name>-<6 hex>.z01.azurefd.net.
+func generatedEndpointHostName(name string) string {
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:6]
+	return strings.ToLower(name) + "-" + suffix + ".z01.azurefd.net"
 }

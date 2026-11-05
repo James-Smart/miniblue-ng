@@ -29,6 +29,17 @@ func (h *Handler) Register(r chi.Router) {
 			r.Get("/", h.Get)
 			r.Patch("/", h.Patch)
 			r.Delete("/", h.Delete)
+
+			r.Route("/afdEndpoints", func(r chi.Router) {
+				endpoints := &nested{store: h.store, spec: endpointSpec}
+				r.Get("/", endpoints.list)
+				r.Route("/{endpointName}", func(r chi.Router) {
+					r.Put("/", endpoints.create)
+					r.Get("/", endpoints.get)
+					r.Patch("/", endpoints.patch)
+					r.Delete("/", endpoints.delete)
+				})
+			})
 		})
 	})
 	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Cdn/profiles", h.ListInSubscription)
