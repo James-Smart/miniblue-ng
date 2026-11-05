@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/moabukar/miniblue/internal/azerr"
+	"github.com/moabukar/miniblue/internal/services/network"
 	"github.com/moabukar/miniblue/internal/store"
 )
 
@@ -246,6 +247,8 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 	h.store.Set(key, rec)
 	h.store.Set(secretKey(secret), map[string]interface{}{"vmKey": key})
 
+	h.syncNICLinks(asString(rec["id"]), nil, rec)
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(vmPublicView(rec))
 }
@@ -374,9 +377,34 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 		return err
 	}
 
+	h.syncNICLinks(asString(rec["id"]), oldRec, rec)
+
 	h.refreshVM(rec)
 	appendProvisionEvent(rec, "virtual machine updated")
 	return nil
+}
+
+// syncNICLinks reconciles the VM's networkProfile.networkInterfaces references
+// with the NIC records: newly referenced NICs are linked to the VM, and NICs
+// that the VM no longer references are unlinked. Missing NICs and malformed
+// references are ignored, matching the package's permissive reference style.
+func (h *Handler) syncNICLinks(vmID string, oldRec, newRec map[string]interface{}) {
+	if vmID == "" {
+		return
+	}
+	oldIDs := networkInterfaceIDs(oldRec)
+	newIDs := networkInterfaceIDs(newRec)
+
+	for key, id := range newIDs {
+		if _, ok := oldIDs[key]; !ok {
+			network.AttachVMToNIC(h.store, id, vmID)
+		}
+	}
+	for key, id := range oldIDs {
+		if _, ok := newIDs[key]; !ok {
+			network.DetachVMFromNIC(h.store, id)
+		}
+	}
 }
 
 // writeDiskError writes the ARM response for a managed-disk validation error
@@ -492,6 +520,7 @@ func (h *Handler) DeleteVM(w http.ResponseWriter, r *http.Request) {
 		h.store.Delete(secretKey(secret))
 	}
 	h.detachVMDisks(rec)
+	h.syncNICLinks(asString(rec["id"]), rec, nil)
 	h.store.Delete(vmKey(sub, rg, name))
 
 	w.WriteHeader(http.StatusNoContent)

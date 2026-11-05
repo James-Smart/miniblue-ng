@@ -35,6 +35,66 @@ func SetNIC(s *store.Store, sub, rg, name string, rec map[string]interface{}) {
 	s.Set(NICKey(sub, rg, name), rec)
 }
 
+// ParseNICID extracts the subscription, resource group and NIC name from a
+// network interface ARM ID. Matching is case-insensitive.
+func ParseNICID(id string) (sub, rg, name string, ok bool) {
+	parts := strings.Split(strings.Trim(strings.TrimSpace(id), "/"), "/")
+	if len(parts) != 8 {
+		return "", "", "", false
+	}
+	if !strings.EqualFold(parts[0], "subscriptions") ||
+		!strings.EqualFold(parts[2], "resourceGroups") ||
+		!strings.EqualFold(parts[4], "providers") ||
+		!strings.EqualFold(parts[5], "Microsoft.Network") ||
+		!strings.EqualFold(parts[6], "networkInterfaces") {
+		return "", "", "", false
+	}
+	if parts[1] == "" || parts[3] == "" || parts[7] == "" {
+		return "", "", "", false
+	}
+	return parts[1], parts[3], parts[7], true
+}
+
+// AttachVMToNIC links a network interface to a virtual machine by setting the
+// NIC's properties.virtualMachine.id. It reports whether the NIC exists.
+func AttachVMToNIC(s *store.Store, nicID, vmID string) bool {
+	sub, rg, name, ok := ParseNICID(nicID)
+	if !ok {
+		return false
+	}
+	rec, ok := GetNIC(s, sub, rg, name)
+	if !ok {
+		return false
+	}
+	rec = mergeMaps(rec, map[string]interface{}{
+		"properties": map[string]interface{}{
+			"virtualMachine": map[string]interface{}{"id": vmID},
+		},
+	})
+	SetNIC(s, sub, rg, name, rec)
+	return true
+}
+
+// DetachVMFromNIC removes the NIC's properties.virtualMachine link. It reports
+// whether the NIC exists.
+func DetachVMFromNIC(s *store.Store, nicID string) bool {
+	sub, rg, name, ok := ParseNICID(nicID)
+	if !ok {
+		return false
+	}
+	rec, ok := GetNIC(s, sub, rg, name)
+	if !ok {
+		return false
+	}
+	rec = mergeMaps(rec, map[string]interface{}{
+		"properties": map[string]interface{}{
+			"virtualMachine": nil,
+		},
+	})
+	SetNIC(s, sub, rg, name, rec)
+	return true
+}
+
 // cloneValue deep-copies maps and slices so merges never alias stored records.
 func cloneValue(v interface{}) interface{} {
 	switch t := v.(type) {

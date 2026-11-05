@@ -264,6 +264,33 @@ func mergeMaps(dst, patch map[string]interface{}) map[string]interface{} {
 	return out
 }
 
+// networkInterfaceIDs maps the lower-cased ARM IDs referenced by a VM record's
+// networkProfile.networkInterfaces array to the IDs as written, so comparisons
+// are case-insensitive while store lookups keep the original spelling. It
+// returns an empty set when the record has no network profile.
+func networkInterfaceIDs(rec map[string]interface{}) map[string]string {
+	ids := map[string]string{}
+	props, _ := rec["properties"].(map[string]interface{})
+	if props == nil {
+		return ids
+	}
+	profile, _ := props["networkProfile"].(map[string]interface{})
+	if profile == nil {
+		return ids
+	}
+	entries, _ := profile["networkInterfaces"].([]interface{})
+	for _, item := range entries {
+		entry, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if id := strings.TrimSpace(asString(entry["id"])); id != "" {
+			ids[strings.ToLower(id)] = id
+		}
+	}
+	return ids
+}
+
 // replaceRecord overwrites dst in place with the contents of src, preserving
 // the map identity the store and in-flight handlers hold.
 func replaceRecord(dst, src map[string]interface{}) {
