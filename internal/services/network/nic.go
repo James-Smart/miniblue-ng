@@ -20,9 +20,25 @@ func NICKey(sub, rg, name string) string {
 	return "nic:" + sub + ":" + rg + ":" + name
 }
 
+// canonicalNICKey resolves the store key for a network-interface reference.
+// ARM IDs are case-insensitive, so a case-only reference must reuse the record
+// that was created first instead of looking up a different key.
+func canonicalNICKey(s *store.Store, sub, rg, name string) string {
+	key := NICKey(sub, rg, name)
+	if s.Exists(key) {
+		return key
+	}
+	for _, candidate := range s.List() {
+		if strings.EqualFold(candidate, key) {
+			return candidate
+		}
+	}
+	return key
+}
+
 // GetNIC reads a network interface from the store.
 func GetNIC(s *store.Store, sub, rg, name string) (map[string]interface{}, bool) {
-	v, ok := s.Get(NICKey(sub, rg, name))
+	v, ok := s.Get(canonicalNICKey(s, sub, rg, name))
 	if !ok {
 		return nil, false
 	}
@@ -30,9 +46,10 @@ func GetNIC(s *store.Store, sub, rg, name string) (map[string]interface{}, bool)
 	return rec, ok
 }
 
-// SetNIC writes a network interface to the store.
+// SetNIC writes a network interface to the store. A case-only reference updates
+// the canonical key rather than creating a second record.
 func SetNIC(s *store.Store, sub, rg, name string, rec map[string]interface{}) {
-	s.Set(NICKey(sub, rg, name), rec)
+	s.Set(canonicalNICKey(s, sub, rg, name), rec)
 }
 
 // ParseNICID extracts the subscription, resource group and NIC name from a
@@ -260,7 +277,7 @@ func usedNICAddresses(s *store.Store, subnetID string) map[string]bool {
 			}
 			if subnetID != "" {
 				subnetRef, _ := props["subnet"].(map[string]interface{})
-				if stringVal(subnetRef["id"]) != subnetID {
+				if !strings.EqualFold(stringVal(subnetRef["id"]), subnetID) {
 					continue
 				}
 			}
@@ -272,9 +289,12 @@ func usedNICAddresses(s *store.Store, subnetID string) map[string]bool {
 
 // allocatePrivateIP returns the first free address in the subnet, starting at
 // the fourth host. It falls back to 10.0.0.4 upward when the subnet cannot be
-// resolved.
-func allocatePrivateIP(s *store.Store, subnetID string) string {
-	used := usedNICAddresses(s, subnetID)
+// resolved. used is shared across the NIC's configurations so two dynamic
+// configs on the same request cannot receive the same address.
+func allocatePrivateIP(s *store.Store, subnetID string, used map[string]bool) string {
+	if used == nil {
+		used = map[string]bool{}
+	}
 	start := ipToUint32(net.IPv4(10, 0, 0, 4))
 	var ipnet *net.IPNet
 
@@ -336,6 +356,31 @@ func (h *Handler) applyIPAllocation(input, existing map[string]interface{}) {
 		}
 	}
 
+	// used is shared by every config in this request. Without it, allocating
+	// address N for one config and then recomputing the used set for the next
+	// config returns N again because the NIC is not stored yet.
+	used := map[string]bool{}
+	seededSubnets := map[string]bool{}
+	seedSubnet := func(subnetID string) {
+		key := strings.ToLower(subnetID)
+		if seededSubnets[key] {
+			return
+		}
+		seededSubnets[key] = true
+		for ip := range usedNICAddresses(h.store, subnetID) {
+			used[ip] = true
+		}
+	}
+
+	type configAllocation struct {
+		props     map[string]interface{}
+		subnetID  string
+		preserved bool
+	}
+	allocations := make([]configAllocation, 0, len(configs))
+
+	// First pass: seed the shared used set with existing allocations and any
+	// caller-supplied static addresses so a dynamic config cannot take one.
 	for i, raw := range configs {
 		cfg, ok := raw.(map[string]interface{})
 		if !ok {
@@ -352,20 +397,42 @@ func (h *Handler) applyIPAllocation(input, existing map[string]interface{}) {
 			method = "Dynamic"
 			cfgProps["privateIPAllocationMethod"] = method
 		}
-		if method == "Static" && stringVal(cfgProps["privateIPAddress"]) != "" {
-			continue
-		}
-		if existingCfg, ok := existingConfigs[ipConfigName(cfg, i)]; ok {
-			existingProps, _ := existingCfg["properties"].(map[string]interface{})
-			if stringVal(existingProps["privateIPAddress"]) != "" {
-				// The builder preserves the stored allocation.
-				continue
-			}
-		}
 
 		subnetRef, _ := cfgProps["subnet"].(map[string]interface{})
 		subnetID := stringVal(subnetRef["id"])
-		cfgProps["privateIPAddress"] = allocatePrivateIP(h.store, subnetID)
+		seedSubnet(subnetID)
+
+		preserved := false
+		if method == "Static" && stringVal(cfgProps["privateIPAddress"]) != "" {
+			preserved = true
+		} else if existingCfg, ok := existingConfigs[ipConfigName(cfg, i)]; ok {
+			existingProps, _ := existingCfg["properties"].(map[string]interface{})
+			if existingIP := stringVal(existingProps["privateIPAddress"]); existingIP != "" {
+				// The builder preserves the stored allocation.
+				used[existingIP] = true
+				preserved = true
+			}
+		}
+		if ip := stringVal(cfgProps["privateIPAddress"]); ip != "" {
+			used[ip] = true
+		}
+
+		allocations = append(allocations, configAllocation{
+			props:     cfgProps,
+			subnetID:  subnetID,
+			preserved: preserved,
+		})
+	}
+
+	// Second pass: allocate for configs that have no IP of their own, adding
+	// every allocation to the shared used set as it is handed out.
+	for _, allocation := range allocations {
+		if allocation.preserved {
+			continue
+		}
+		ip := allocatePrivateIP(h.store, allocation.subnetID, used)
+		allocation.props["privateIPAddress"] = ip
+		used[ip] = true
 	}
 }
 
@@ -680,7 +747,7 @@ func (h *Handler) DeleteNetworkInterface(w http.ResponseWriter, r *http.Request)
 	rg := chi.URLParam(r, "resourceGroupName")
 	name := chi.URLParam(r, "nicName")
 
-	if !h.store.Delete(NICKey(sub, rg, name)) {
+	if !h.store.Delete(canonicalNICKey(h.store, sub, rg, name)) {
 		azerr.NotFound(w, nicType, name)
 		return
 	}

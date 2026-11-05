@@ -99,6 +99,56 @@ func (h *Handler) ensureOSDisk(rec map[string]interface{}) error {
 	return nil
 }
 
+// snapshotVMDisks records the managed-disk keys that exist before a VM create
+// provisions any disks. It lets a failed create remove only the records it
+// created and detach existing disks it attached.
+func (h *Handler) snapshotVMDisks(sub, rg string) map[string]bool {
+	snapshot := map[string]bool{}
+	for _, key := range h.store.List() {
+		if diskKeyInResourceGroup(key, sub, rg) {
+			snapshot[key] = true
+		}
+	}
+	return snapshot
+}
+
+// diskKeyInResourceGroup reports whether key belongs to disk:<sub>:<rg>:.
+// Case is folded because ARM identifiers are case-insensitive.
+func diskKeyInResourceGroup(key, sub, rg string) bool {
+	return strings.HasPrefix(strings.ToLower(key), strings.ToLower("disk:"+sub+":"+rg+":"))
+}
+
+// rollbackVMDisks undoes the disk side effects of a failed VM create. Disks
+// that did not exist in snapshot are deleted (they were generated or created
+// lazily by this request); pre-existing disks attached to vmID are detached so
+// a retry can attach them again.
+func (h *Handler) rollbackVMDisks(sub, rg, vmID string, snapshot map[string]bool) {
+	for _, key := range h.store.List() {
+		if !diskKeyInResourceGroup(key, sub, rg) {
+			continue
+		}
+		if !snapshot[key] {
+			h.store.Delete(key)
+			continue
+		}
+		v, ok := h.store.Get(key)
+		if !ok {
+			continue
+		}
+		rec, ok := v.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		props, _ := rec["properties"].(map[string]interface{})
+		if asString(props["managedBy"]) != vmID {
+			continue
+		}
+		props["managedBy"] = ""
+		props["diskState"] = "Unattached"
+		h.store.Set(key, rec)
+	}
+}
+
 // detachVMDisks detaches every managed disk referenced by the VM's storage
 // profile (OS and data) without deleting the disk resources.
 func (h *Handler) detachVMDisks(rec map[string]interface{}) {
@@ -306,10 +356,13 @@ func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface
 		return err
 	}
 
-	oldIDs := make(map[string]bool)
+	// ARM IDs are case-insensitive: compare membership by canonical tuple so a
+	// case-only change neither creates a duplicate disk nor detaches a disk that
+	// the same update just attached.
+	oldIDs := make(map[string]string)
 	for _, entry := range dataDiskEntries(oldRec) {
 		if id := dataDiskManagedDiskID(entry); id != "" {
-			oldIDs[id] = true
+			oldIDs[diskIDKey(id)] = id
 		}
 	}
 
@@ -319,7 +372,7 @@ func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface
 		if id == "" {
 			continue
 		}
-		keptIDs[id] = true
+		keptIDs[diskIDKey(id)] = true
 
 		sub, rg, name, ok := disks.ParseID(id)
 		if !ok {
@@ -338,13 +391,35 @@ func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface
 		disks.Attach(h.store, sub, rg, name, vmID)
 	}
 
-	for id := range oldIDs {
-		if keptIDs[id] {
+	for key, id := range oldIDs {
+		if keptIDs[key] {
 			continue
 		}
 		h.detachDiskByID(id, vmID)
 	}
 	return nil
+}
+
+// diskIDKey returns a case-insensitive identity for a managed-disk ARM ID.
+// Valid IDs use their parsed canonical tuple; anything else falls back to a
+// trimmed, lower-cased string so comparisons are still stable.
+func diskIDKey(id string) string {
+	if sub, rg, name, ok := disks.ParseID(id); ok {
+		return strings.ToLower(sub + ":" + rg + ":" + name)
+	}
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+// sameDiskID reports whether two managed-disk references point at the same
+// disk, ignoring the case of the ARM ID and its resource segments.
+func sameDiskID(a, b string) bool {
+	if a == b {
+		return true
+	}
+	if a == "" || b == "" {
+		return false
+	}
+	return diskIDKey(a) == diskIDKey(b)
 }
 
 // dataDiskEntries returns the VM record's storageProfile.dataDisks entries as

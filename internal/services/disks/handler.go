@@ -46,10 +46,26 @@ func Key(sub, rg, name string) string {
 	return "disk:" + sub + ":" + rg + ":" + name
 }
 
+// canonicalKey resolves the store key for a disk reference. ARM IDs are
+// case-insensitive, so a request that only differs in case must resolve to the
+// record that was created first instead of creating a duplicate key.
+func canonicalKey(s *store.Store, sub, rg, name string) string {
+	key := Key(sub, rg, name)
+	if s.Exists(key) {
+		return key
+	}
+	for _, candidate := range s.List() {
+		if strings.EqualFold(candidate, key) {
+			return candidate
+		}
+	}
+	return key
+}
+
 // Get reads a managed disk record from the store. The returned record retains
 // internal fields such as _vmOwned; HTTP handlers strip them before responding.
 func Get(s *store.Store, sub, rg, name string) (map[string]interface{}, bool) {
-	v, ok := s.Get(Key(sub, rg, name))
+	v, ok := s.Get(canonicalKey(s, sub, rg, name))
 	if !ok {
 		return nil, false
 	}
@@ -57,9 +73,10 @@ func Get(s *store.Store, sub, rg, name string) (map[string]interface{}, bool) {
 	return rec, ok
 }
 
-// Set writes a managed disk record to the store.
+// Set writes a managed disk record to the store. A case-only reference updates
+// the canonical key rather than creating a second record.
 func Set(s *store.Store, sub, rg, name string, rec map[string]interface{}) {
-	s.Set(Key(sub, rg, name), rec)
+	s.Set(canonicalKey(s, sub, rg, name), rec)
 }
 
 // Attach links a disk to a virtual machine. It reports false when the disk
@@ -317,7 +334,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.store.Delete(Key(sub, rg, name))
+	h.store.Delete(canonicalKey(h.store, sub, rg, name))
 	w.WriteHeader(http.StatusAccepted)
 }
 

@@ -206,28 +206,22 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 	rec["_networkName"] = vmNetworkName(rg, name)
 	appendProvisionEvent(rec, "virtual machine created (image %s)", image)
 
-	if err := h.validateDataDisksForVM(rec, asString(getProps(rec)["vmId"])); err != nil {
+	vmID := asString(getProps(rec)["vmId"])
+	if err := h.validateDataDisksForVM(rec, vmID); err != nil {
 		writeDiskError(w, err)
 		return
 	}
-	if err := h.ensureOSDisk(rec); err != nil {
-		if !writeDiskError(w, err) {
-			azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-		}
-		return
-	}
-	if err := h.syncDataDisks(asString(getProps(rec)["vmId"]), nil, rec); err != nil {
-		if !writeDiskError(w, err) {
-			azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-		}
-		return
-	}
-	getProps(rec)["instanceView"] = instanceViewFor(rec)
-	appendProvisionEvent(rec, "OS disk %s attached", osDiskName(rec))
 
+	// Start the compute environment before creating any disk records. If the
+	// container fails, no generated disk and no attachment leaks; if a later
+	// disk operation fails, the container/network and this request's disk
+	// changes are rolled back below.
+	network := ""
+	containerName := ""
+	containerStarted := false
 	if h.dockerAvail {
-		network := vmNetworkName(rg, name)
-		containerName := vmContainerName(rg, name)
+		network = vmNetworkName(rg, name)
+		containerName = vmContainerName(rg, name)
 		if err := dockerNetworkCreate(network); err != nil {
 			azerr.WriteError(w, http.StatusConflict, "ContainerStartFailed", err.Error())
 			return
@@ -251,8 +245,31 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 			azerr.WriteError(w, http.StatusConflict, "ContainerStartFailed", err.Error())
 			return
 		}
+		containerStarted = true
 		appendProvisionEvent(rec, "compute environment started (container %s)", containerName)
 	}
+
+	diskSnapshot := h.snapshotVMDisks(sub, rg)
+	rollbackDisks := func(err error) {
+		h.rollbackVMDisks(sub, rg, vmID, diskSnapshot)
+		if containerStarted {
+			dockerRemove(containerName)
+			dockerNetworkRemove(network)
+		}
+		if !writeDiskError(w, err) {
+			azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		}
+	}
+	if err := h.ensureOSDisk(rec); err != nil {
+		rollbackDisks(err)
+		return
+	}
+	if err := h.syncDataDisks(vmID, nil, rec); err != nil {
+		rollbackDisks(err)
+		return
+	}
+	getProps(rec)["instanceView"] = instanceViewFor(rec)
+	appendProvisionEvent(rec, "OS disk %s attached", osDiskName(rec))
 
 	// Custom data is create-time input only; updates never re-run it.
 	h.recordCustomData(rec)
@@ -342,7 +359,7 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 	if !explicitDisk {
 		newDiskID = oldDiskID
 	}
-	switchDisk := newDiskID != "" && newDiskID != oldDiskID
+	switchDisk := newDiskID != "" && !sameDiskID(newDiskID, oldDiskID)
 	if switchDisk {
 		if err := h.validateOSDiskForVM(newDiskID, vmID); err != nil {
 			return err
@@ -380,9 +397,10 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 			rec["_osDiskName"] = osDiskName(rec)
 		}
 		appendProvisionEvent(rec, "OS disk %s attached", osDiskName(rec))
-	} else if oldDiskID != "" && osDiskManagedDiskID(rec) != oldDiskID {
+	} else if oldDiskID != "" && !sameDiskID(osDiskManagedDiskID(rec), oldDiskID) {
 		// An explicit null must not orphan or regenerate the existing disk, and
-		// it must not drop the disk-derived fields either.
+		// it must not drop the disk-derived fields either. A case-only change to
+		// the same ID is not a replacement.
 		restoreOSDiskBlock(rec, oldOSDisk)
 	}
 
@@ -559,7 +577,8 @@ func (h *Handler) powerAction(w http.ResponseWriter, r *http.Request, action str
 		// still meaningful metadata: providers power-cycle VMs during updates
 		// and Docker-free CI must not fail those calls. Record the requested
 		// state and return the public view; operations that genuinely need a
-		// container (runCommand, logs, services, SSH) keep their 409.
+		// container (runCommand, logs, service deploy, SSH) keep their 409.
+		// Service list/delete remain metadata-only, matching the docs.
 		switch action {
 		case "start", "restart":
 			getMinibluProps(rec)["powerState"] = "running"
