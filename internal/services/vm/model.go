@@ -131,6 +131,52 @@ func powerState(rec map[string]interface{}) string {
 	return s
 }
 
+// customDataPayload returns the create-time user data configured on a VM,
+// preferring osProfile.customData and falling back to properties.userData.
+func customDataPayload(rec map[string]interface{}) string {
+	props := getProps(rec)
+	if osProfile, ok := props["osProfile"].(map[string]interface{}); ok {
+		if custom := asString(osProfile["customData"]); custom != "" {
+			return custom
+		}
+	}
+	return asString(props["userData"])
+}
+
+// recordCustomData runs create-time custom data and stores the outcome under
+// properties.miniblue.customData. It is called only on create and never fails
+// VM creation: Docker-free mode, cloud-config payloads and non-zero script
+// exits are all recorded as status instead.
+func (h *Handler) recordCustomData(rec map[string]interface{}) {
+	encoded := customDataPayload(rec)
+	if encoded == "" {
+		return
+	}
+
+	var status map[string]interface{}
+	switch {
+	case !h.dockerAvail:
+		status = map[string]interface{}{"executed": false, "reason": "docker unavailable"}
+	default:
+		containerName, _ := getMinibluProps(rec)["containerName"].(string)
+		if containerName == "" {
+			status = map[string]interface{}{"executed": false, "reason": "container unavailable"}
+		} else {
+			status = runCustomData(containerName, encoded)
+		}
+	}
+	if status == nil {
+		return
+	}
+
+	getMinibluProps(rec)["customData"] = status
+	if executed, _ := status["executed"].(bool); executed {
+		appendProvisionEvent(rec, "custom data executed (exit code %v)", status["exitCode"])
+	} else {
+		appendProvisionEvent(rec, "custom data skipped: %v", status["reason"])
+	}
+}
+
 // osDiskName returns the OS disk name from the storage profile, falling back
 // to the internal field used by disk provisioning. It returns "" when the VM
 // has no OS disk yet (for example, a stub-mode VM created without one).

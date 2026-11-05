@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -149,6 +150,58 @@ func dockerExec(name string, script string) (output string, exitCode int, err er
 		return string(out), -1, err
 	}
 	return string(out), 0, nil
+}
+
+// customDataOutputLimit is the maximum amount of custom-data output retained
+// in the status record (16 KiB).
+const customDataOutputLimit = 16 * 1024
+
+// decodeCustomData turns the base64 (or, leniently, raw text) custom-data
+// payload into a script. Standard base64 is tried first, then unpadded
+// URL-safe base64, and anything else is treated as raw script text. A UTF-8
+// BOM is trimmed and CRLF newlines are normalised so the cloud-config check
+// and `sh -c` see portable input.
+func decodeCustomData(encoded string) string {
+	script := strings.TrimSpace(encoded)
+	if decoded, err := base64.StdEncoding.DecodeString(script); err == nil {
+		script = string(decoded)
+	} else if decoded, err := base64.RawURLEncoding.DecodeString(script); err == nil {
+		script = string(decoded)
+	}
+	script = strings.TrimPrefix(script, "\ufeff")
+	script = strings.ReplaceAll(script, "\r\n", "\n")
+	return script
+}
+
+// runCustomData executes a VM's custom data inside its container and returns
+// the status recorded under properties.miniblue.customData. Only shell scripts
+// are supported: a #cloud-config payload is skipped with a reason. A non-zero
+// script exit does not fail VM creation, so the exit code is reported instead.
+func runCustomData(containerName, encoded string) map[string]interface{} {
+	script := decodeCustomData(encoded)
+	if strings.HasPrefix(strings.TrimSpace(script), "#cloud-config") {
+		return map[string]interface{}{
+			"executed": false,
+			"reason":   "cloud-config is not supported; scripts only",
+		}
+	}
+
+	output, exitCode, err := dockerExec(containerName, script)
+	if err != nil {
+		return map[string]interface{}{
+			"executed": false,
+			"reason":   err.Error(),
+		}
+	}
+	if len(output) > customDataOutputLimit {
+		output = output[:customDataOutputLimit]
+	}
+	return map[string]interface{}{
+		"executed": true,
+		"exitCode": exitCode,
+		"output":   output,
+		"shell":    "sh",
+	}
 }
 
 // dockerLogsOutput returns a snapshot of a container's logs (stdout+stderr).

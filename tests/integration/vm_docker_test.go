@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -205,4 +206,76 @@ func TestVMDockerLifecycle(t *testing.T) {
 		t.Fatal("service port still open after VM delete")
 	}
 	fmt.Println("vm docker lifecycle complete")
+}
+
+// TestVMCustomDataDocker proves create-time custom data really runs inside the
+// VM container, and that cloud-config payloads are skipped (scripts only).
+func TestVMCustomDataDocker(t *testing.T) {
+	rgURL := serverURL + "/subscriptions/sub1/resourcegroups/vmcdrg" + vmAPIVersion
+	resp, _ := vmDoJSON(t, "PUT", rgURL, `{"location":"eastus"}`)
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		t.Fatalf("resource group create failed: %d", resp.StatusCode)
+	}
+
+	base := serverURL + "/subscriptions/sub1/resourceGroups/vmcdrg/providers/Microsoft.Compute/virtualMachines"
+
+	// --- script custom data runs on create; its output/status is recorded ---
+	customData := base64.StdEncoding.EncodeToString([]byte("echo hello > /tmp/miniblue-custom-data"))
+	resp, m := vmDoJSON(t, "PUT", base+"/scripted"+vmAPIVersion,
+		`{"location":"eastus","properties":{"miniblue":{"image":"alpine:3"},"osProfile":{"customData":"`+customData+`"}}}`)
+	if resp.StatusCode != 201 {
+		t.Fatalf("vm create with custom data failed: %d %v", resp.StatusCode, m)
+	}
+	mb := m["properties"].(map[string]interface{})["miniblue"].(map[string]interface{})
+	status, ok := mb["customData"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected properties.miniblue.customData status, got %v", mb["customData"])
+	}
+	if status["executed"] != true {
+		t.Fatalf("expected custom data to execute on create, got %v", status)
+	}
+	if code, _ := status["exitCode"].(float64); code != 0 {
+		t.Fatalf("expected exitCode 0, got %v", status["exitCode"])
+	}
+	if status["shell"] != "sh" {
+		t.Fatalf("expected shell sh, got %v", status["shell"])
+	}
+
+	// The script's side effect is visible through runCommand.
+	resp, m = vmDoJSON(t, "POST", base+"/scripted/runCommand"+vmAPIVersion,
+		`{"commandId":"RunShellScript","script":["cat /tmp/miniblue-custom-data"]}`)
+	if resp.StatusCode != 200 {
+		t.Fatalf("runCommand failed: %d %v", resp.StatusCode, m)
+	}
+	msg := m["value"].([]interface{})[0].(map[string]interface{})["message"].(string)
+	if !strings.Contains(msg, "hello") {
+		t.Fatalf("custom data did not write the expected file: %q", msg)
+	}
+
+	// --- cloud-config is not a shell script: skipped and recorded ---
+	cloudConfig := base64.StdEncoding.EncodeToString([]byte("#cloud-config\nruncmd: []"))
+	resp, m = vmDoJSON(t, "PUT", base+"/cloudinit"+vmAPIVersion,
+		`{"location":"eastus","properties":{"miniblue":{"image":"alpine:3"},"osProfile":{"customData":"`+cloudConfig+`"}}}`)
+	if resp.StatusCode != 201 {
+		t.Fatalf("vm create with cloud-config failed: %d %v", resp.StatusCode, m)
+	}
+	mb = m["properties"].(map[string]interface{})["miniblue"].(map[string]interface{})
+	status, ok = mb["customData"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected properties.miniblue.customData status, got %v", mb["customData"])
+	}
+	if status["executed"] != false {
+		t.Fatalf("expected cloud-config to be skipped, got %v", status)
+	}
+	reason, _ := status["reason"].(string)
+	if !strings.Contains(reason, "cloud-config") {
+		t.Fatalf("expected reason to mention cloud-config, got %q", reason)
+	}
+
+	for _, name := range []string{"scripted", "cloudinit"} {
+		resp, _ := vmDoJSON(t, "DELETE", base+"/"+name+vmAPIVersion, "")
+		if resp.StatusCode != 204 {
+			t.Fatalf("vm delete failed for %s: %d", name, resp.StatusCode)
+		}
+	}
 }

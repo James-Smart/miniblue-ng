@@ -254,6 +254,9 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 		appendProvisionEvent(rec, "compute environment started (container %s)", containerName)
 	}
 
+	// Custom data is create-time input only; updates never re-run it.
+	h.recordCustomData(rec)
+
 	h.store.Set(key, rec)
 	h.store.Set(secretKey(secret), map[string]interface{}{"vmKey": key})
 
