@@ -13,6 +13,7 @@ const (
 	originType      = "Microsoft.Cdn/profiles/originGroups/origins"
 	ruleSetType     = "Microsoft.Cdn/profiles/ruleSets"
 	ruleType        = "Microsoft.Cdn/profiles/ruleSets/rules"
+	routeType       = "Microsoft.Cdn/profiles/afdEndpoints/routes"
 )
 
 // profileResponse builds the full profile response. It merges input over the
@@ -193,6 +194,41 @@ func ruleResponse(parent, input, existing map[string]interface{}) map[string]int
 	}
 	if _, ok := props["actions"]; !ok {
 		props["actions"] = []interface{}{}
+	}
+	defaultString(props, "deploymentStatus", "NotStarted")
+	rec["properties"] = props
+
+	return rec
+}
+
+// routeResponse builds a route response. Association lists and the routing
+// settings are echoed with the provider's defaults filled in. The custom domain
+// list is preserved exactly as written, including its order.
+func routeResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	props["endpointName"] = stringVal(parent["name"])
+
+	if _, ok := props["supportedProtocols"]; !ok {
+		props["supportedProtocols"] = []interface{}{"Https"}
+	}
+	if _, ok := props["patternsToMatch"]; !ok {
+		props["patternsToMatch"] = []interface{}{"/*"}
+	}
+	defaultString(props, "forwardingProtocol", "MatchRequest")
+	defaultString(props, "linkToDefaultDomain", "Enabled")
+	defaultString(props, "httpsRedirect", "Enabled")
+	defaultString(props, "enabledState", "Enabled")
+	if _, ok := props["customDomains"]; !ok {
+		props["customDomains"] = []interface{}{}
+	}
+	if _, ok := props["ruleSets"]; !ok {
+		props["ruleSets"] = []interface{}{}
 	}
 	defaultString(props, "deploymentStatus", "NotStarted")
 	rec["properties"] = props

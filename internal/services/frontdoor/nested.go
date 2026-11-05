@@ -285,6 +285,16 @@ var endpointSpec = resourceSpec{
 	children: []string{"route"},
 }
 
+// routeSpec is the route child of an AFD endpoint.
+var routeSpec = resourceSpec{
+	kind:     "route",
+	keyKind:  "route",
+	segment:  "routes",
+	armType:  routeType,
+	parents:  []string{"profileName", "endpointName"},
+	computed: routeResponse,
+}
+
 // originGroupSpec is the origin group child of a profile.
 var originGroupSpec = resourceSpec{
 	kind:     "originGroup",

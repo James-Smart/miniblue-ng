@@ -38,6 +38,17 @@ func (h *Handler) Register(r chi.Router) {
 					r.Get("/", endpoints.get)
 					r.Patch("/", endpoints.patch)
 					r.Delete("/", endpoints.delete)
+
+					r.Route("/routes", func(r chi.Router) {
+						routes := &nested{store: h.store, spec: routeSpec}
+						r.Get("/", routes.list)
+						r.Route("/{routeName}", func(r chi.Router) {
+							r.Put("/", routes.create)
+							r.Get("/", routes.get)
+							r.Patch("/", routes.patch)
+							r.Delete("/", routes.delete)
+						})
+					})
 				})
 			})
 
