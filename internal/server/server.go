@@ -27,6 +27,7 @@ import (
 	"github.com/moabukar/miniblue/internal/services/disks"
 	"github.com/moabukar/miniblue/internal/services/dns"
 	"github.com/moabukar/miniblue/internal/services/eventgrid"
+	"github.com/moabukar/miniblue/internal/services/frontdoor"
 	"github.com/moabukar/miniblue/internal/services/identity"
 	"github.com/moabukar/miniblue/internal/services/keyvault"
 	"github.com/moabukar/miniblue/internal/services/loadbalancer"
@@ -206,6 +207,7 @@ func (s *Server) setupRoutes() {
 		{"vm", func() { vm.NewHandler(s.store).Register(s.router) }},
 		{"disks", func() { disks.NewHandler(s.store).Register(s.router) }},
 		{"sshkeys", func() { sshkeys.NewHandler(s.store).Register(s.router) }},
+		{"frontdoor", func() { frontdoor.NewHandler(s.store).Register(s.router) }},
 	}
 	// Always include core infrastructure in service list
 	s.services = []string{"subscriptions", "tenants"}
