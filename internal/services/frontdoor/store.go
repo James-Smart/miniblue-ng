@@ -32,6 +32,31 @@ func rgPrefix(sub, rg string) string {
 	return "fd:" + sub + ":" + rg + ":"
 }
 
+// profileChildKinds lists every store key kind nested under a profile. WAF
+// policies are resource-group scoped (fd:<sub>:<rg>:waf:<name>), not profile
+// children, so they are deliberately absent.
+var profileChildKinds = []string{
+	"endpoint",
+	"route",
+	"origingroup",
+	"origin",
+	"ruleset",
+	"rule",
+	"customdomain",
+	"secret",
+	"securitypolicy",
+}
+
+// deleteProfileChildren removes every child resource of profile across all
+// child kinds. The trailing ":" in each prefix keeps profile "p1" from matching
+// a sibling named "p10".
+func deleteProfileChildren(s *store.Store, sub, rg, profile string) {
+	prefix := "fd:" + sub + ":" + rg + ":"
+	for _, kind := range profileChildKinds {
+		s.DeleteByPrefix(prefix + kind + ":" + profile + ":")
+	}
+}
+
 // resourceID appends a child segment and name to a parent ARM ID.
 func resourceID(parentID, segment, name string) string {
 	return strings.TrimRight(parentID, "/") + "/" + segment + "/" + name

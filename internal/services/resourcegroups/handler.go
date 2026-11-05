@@ -152,6 +152,10 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	// Also clean up resources in this resource group
 	p := sub + ":" + name + ":"
+	// Front Door keys are scoped by subscription as well as RG, so this prefix
+	// covers profiles, all their children and WAF policies without crossing
+	// into another subscription's RG of the same name.
+	h.store.DeleteByPrefix("fd:" + p)
 	h.store.DeleteByPrefix("vnet:" + p)
 	h.store.DeleteByPrefix("subnet:" + p)
 	h.store.DeleteByPrefix("func:" + p)

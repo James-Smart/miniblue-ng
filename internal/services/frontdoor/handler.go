@@ -197,10 +197,13 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	rg := chi.URLParam(r, "resourceGroupName")
 	name := chi.URLParam(r, "profileName")
 
-	if !h.store.Delete(profileKey(sub, rg, name)) {
+	if !h.store.Exists(profileKey(sub, rg, name)) {
 		azerr.NotFound(w, profileType, name)
 		return
 	}
+
+	deleteProfileChildren(h.store, sub, rg, name)
+	h.store.Delete(profileKey(sub, rg, name))
 	w.WriteHeader(http.StatusAccepted)
 }
 
