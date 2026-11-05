@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -177,6 +178,14 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 		rec := existing
 		if loc, ok := input["location"].(string); ok && loc != "" {
 			rec["location"] = loc
+		}
+		for _, k := range []string{"tags", "zones", "plan", "extendedLocation"} {
+			if v, ok := input[k]; ok {
+				rec[k] = v
+			}
+		}
+		if _, ok := rec["_createdAt"]; !ok {
+			rec["_createdAt"] = time.Now().UTC().Format(time.RFC3339)
 		}
 		props := getProps(rec)
 		copyPropertyBlocks(props, inProps)

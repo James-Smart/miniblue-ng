@@ -148,10 +148,20 @@ func osDiskName(rec map[string]interface{}) string {
 	return name
 }
 
+// provisionedAt returns the persisted provisioning timestamp for a VM. Older
+// records without one are backfilled on the fly without mutating them, so the
+// value a single response reports stays internally consistent.
+func provisionedAt(rec map[string]interface{}) string {
+	if ts, _ := rec["_createdAt"].(string); ts != "" {
+		return ts
+	}
+	return time.Now().UTC().Format(time.RFC3339)
+}
+
 // instanceViewFor builds the ARM instance view for a VM record from its
 // current power state and, when known, its OS disk.
 func instanceViewFor(rec map[string]interface{}) map[string]interface{} {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := provisionedAt(rec)
 
 	powerCode, powerDisplay := "PowerState/running", "VM running"
 	switch powerState(rec) {
@@ -297,6 +307,7 @@ func buildVMRecord(sub, rg, name string, input map[string]interface{}, image str
 			rec[k] = v
 		}
 	}
+	rec["_createdAt"] = time.Now().UTC().Format(time.RFC3339)
 	props["instanceView"] = instanceViewFor(rec)
 	return rec
 }
