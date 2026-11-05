@@ -172,9 +172,15 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	aks.CleanupClustersInRG(h.store, sub, name)
 	h.store.DeleteByPrefix("aks:cluster:" + p)
 	// Same for VM containers/networks and their identity-secret index entries.
+	// CleanupVMsInRG also detaches NICs/disks and removes VM extensions before
+	// the owning records are cleared below.
 	vm.CleanupVMsInRG(h.store, sub, name)
 	h.store.DeleteByPrefix("vm:" + p)
 	h.store.DeleteByPrefix("vmsvc:" + p)
+	h.store.DeleteByPrefix("vmext:" + p)
+	h.store.DeleteByPrefix("nic:" + p)
+	h.store.DeleteByPrefix("disk:" + p)
+	h.store.DeleteByPrefix("sshkey:" + p)
 	h.store.DeleteByPrefix("msi:identity:" + p)
 	h.store.DeleteByPrefix("nsg:" + p)
 	h.store.DeleteByPrefix("nsgrule:" + p)

@@ -529,6 +529,7 @@ func (h *Handler) DeleteVM(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.store.DeleteByPrefix("vmsvc:" + sub + ":" + rg + ":" + name + ":")
+	h.store.DeleteByPrefix("vmext:" + sub + ":" + rg + ":" + name + ":")
 	if secret, _ := rec["_identitySecret"].(string); secret != "" {
 		h.store.Delete(secretKey(secret))
 	}

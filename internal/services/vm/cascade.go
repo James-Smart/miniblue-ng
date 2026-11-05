@@ -14,6 +14,9 @@ import (
 // the helpers, never returned — the ARM-level delete must always succeed.
 func CleanupVMsInRG(s *store.Store, sub, rg string) {
 	dockerOK := checkDockerCached()
+	// The detach helpers only need the store; a bare handler avoids a Docker
+	// probe and keeps them shared with the HTTP delete path.
+	h := &Handler{store: s}
 	for _, item := range s.ListByPrefix("vm:" + sub + ":" + rg + ":") {
 		rec, ok := item.(map[string]interface{})
 		if !ok {
@@ -23,6 +26,16 @@ func CleanupVMsInRG(s *store.Store, sub, rg string) {
 		if secret, _ := rec["_identitySecret"].(string); secret != "" {
 			s.Delete(secretKey(secret))
 		}
+		// Extension children are owned by the VM and must never outlive it.
+		if name != "" {
+			s.DeleteByPrefix("vmext:" + sub + ":" + rg + ":" + name + ":")
+		}
+		// Detach NICs and managed disks before their own records are removed by
+		// the resource group cascade. Cross-resource-group references stay
+		// consistent, and the records themselves are left to the caller.
+		h.syncNICLinks(asString(rec["id"]), rec, nil)
+		h.detachVMDisks(rec)
+
 		if !dockerOK || name == "" {
 			continue
 		}
