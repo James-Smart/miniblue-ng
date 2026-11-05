@@ -106,6 +106,28 @@ func (h *Handler) Register(r chi.Router) {
 					r.Delete("/", domains.delete)
 				})
 			})
+
+			r.Route("/secrets", func(r chi.Router) {
+				secrets := &nested{store: h.store, spec: secretSpec}
+				r.Get("/", secrets.list)
+				r.Route("/{secretName}", func(r chi.Router) {
+					r.Put("/", secrets.create)
+					r.Get("/", secrets.get)
+					r.Patch("/", secrets.patch)
+					r.Delete("/", secrets.delete)
+				})
+			})
+
+			r.Route("/securityPolicies", func(r chi.Router) {
+				policies := &nested{store: h.store, spec: securityPolicySpec}
+				r.Get("/", policies.list)
+				r.Route("/{securityPolicyName}", func(r chi.Router) {
+					r.Put("/", policies.create)
+					r.Get("/", policies.get)
+					r.Patch("/", policies.patch)
+					r.Delete("/", policies.delete)
+				})
+			})
 		})
 	})
 	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Cdn/profiles", h.ListInSubscription)

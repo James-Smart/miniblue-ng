@@ -360,3 +360,23 @@ var ruleSpec = resourceSpec{
 	parents:  []string{"profileName", "ruleSetName"},
 	computed: ruleResponse,
 }
+
+// secretSpec is the secret child of a profile.
+var secretSpec = resourceSpec{
+	kind:     "secret",
+	keyKind:  "secret",
+	segment:  "secrets",
+	armType:  secretType,
+	parents:  []string{"profileName"},
+	computed: secretResponse,
+}
+
+// securityPolicySpec is the security policy child of a profile.
+var securityPolicySpec = resourceSpec{
+	kind:     "securityPolicy",
+	keyKind:  "securitypolicy",
+	segment:  "securityPolicies",
+	armType:  securityPolicyType,
+	parents:  []string{"profileName"},
+	computed: securityPolicyResponse,
+}

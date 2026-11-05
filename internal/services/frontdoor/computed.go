@@ -10,14 +10,16 @@ import (
 )
 
 const (
-	profileType      = "Microsoft.Cdn/profiles"
-	endpointType     = "Microsoft.Cdn/profiles/afdEndpoints"
-	originGroupType  = "Microsoft.Cdn/profiles/originGroups"
-	originType       = "Microsoft.Cdn/profiles/originGroups/origins"
-	ruleSetType      = "Microsoft.Cdn/profiles/ruleSets"
-	ruleType         = "Microsoft.Cdn/profiles/ruleSets/rules"
-	routeType        = "Microsoft.Cdn/profiles/afdEndpoints/routes"
-	customDomainType = "Microsoft.Cdn/profiles/customDomains"
+	profileType        = "Microsoft.Cdn/profiles"
+	endpointType       = "Microsoft.Cdn/profiles/afdEndpoints"
+	originGroupType    = "Microsoft.Cdn/profiles/originGroups"
+	originType         = "Microsoft.Cdn/profiles/originGroups/origins"
+	ruleSetType        = "Microsoft.Cdn/profiles/ruleSets"
+	ruleType           = "Microsoft.Cdn/profiles/ruleSets/rules"
+	routeType          = "Microsoft.Cdn/profiles/afdEndpoints/routes"
+	customDomainType   = "Microsoft.Cdn/profiles/customDomains"
+	secretType         = "Microsoft.Cdn/profiles/secrets"
+	securityPolicyType = "Microsoft.Cdn/profiles/securityPolicies"
 )
 
 // profileResponse builds the full profile response. It merges input over the
@@ -280,6 +282,76 @@ func customDomainResponse(parent, input, existing map[string]interface{}) map[st
 	props["validationProperties"] = validation
 	defaultString(props, "domainValidationState", "Pending")
 	defaultString(props, "deploymentStatus", "NotStarted")
+	rec["properties"] = props
+
+	return rec
+}
+
+// secretResponse builds a secret response. The tagged-union parameters are
+// echoed as supplied. CustomerCertificate secrets get the expiration and
+// subject alternative names Azure fills in, so the provider's flatten does not
+// see zero values for fields it expects.
+func secretResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	params := cloneMap(mapVal(props["parameters"]))
+	if params == nil {
+		params = map[string]interface{}{}
+	}
+	if stringVal(params["type"]) == "CustomerCertificate" {
+		if stringVal(params["expirationDate"]) == "" {
+			params["expirationDate"] = time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339)
+		}
+		if v, ok := params["subjectAlternativeNames"]; !ok || v == nil {
+			params["subjectAlternativeNames"] = []interface{}{}
+		}
+	}
+	props["parameters"] = params
+	defaultString(props, "deploymentStatus", "NotStarted")
+	rec["properties"] = props
+
+	return rec
+}
+
+// securityPolicyResponse builds a security policy response. The tagged-union
+// parameters are echoed as supplied; each association domain is marked active
+// when the caller did not say otherwise, and the match patterns are preserved.
+func securityPolicyResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	params := cloneMap(mapVal(props["parameters"]))
+	if params == nil {
+		params = map[string]interface{}{}
+	}
+	if associations, ok := params["associations"].([]interface{}); ok {
+		for _, entry := range associations {
+			association := mapVal(entry)
+			domains, ok := association["domains"].([]interface{})
+			if !ok {
+				continue
+			}
+			for _, domainEntry := range domains {
+				domain := mapVal(domainEntry)
+				if domain == nil {
+					continue
+				}
+				if v, ok := domain["isActive"]; !ok || v == nil {
+					domain["isActive"] = true
+				}
+			}
+		}
+	}
+	props["parameters"] = params
 	rec["properties"] = props
 
 	return rec
