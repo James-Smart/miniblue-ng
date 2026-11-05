@@ -174,13 +174,19 @@ func TestVMRuntimeOperationsRequireDocker(t *testing.T) {
 	expectStatus(t, resp, 201)
 	resp.Body.Close()
 
-	// Every Docker-dependent operation returns 409 DockerUnavailable in stub mode.
+	// Power actions are metadata-only in stub mode: they succeed and update the
+	// stored state instead of requiring Docker.
+	for _, action := range []string{"start", "powerOff", "restart"} {
+		resp := doRequest(t, "POST", vmURL(ts, "sub1", "rg1", "web")+"/"+action+vmAV, "")
+		expectStatus(t, resp, 200)
+		resp.Body.Close()
+	}
+
+	// Operations that genuinely need the Docker backend still return 409
+	// DockerUnavailable in stub mode.
 	checks := []struct {
 		method, url, body string
 	}{
-		{"POST", vmURL(ts, "sub1", "rg1", "web") + "/start" + vmAV, ""},
-		{"POST", vmURL(ts, "sub1", "rg1", "web") + "/powerOff" + vmAV, ""},
-		{"POST", vmURL(ts, "sub1", "rg1", "web") + "/restart" + vmAV, ""},
 		{"POST", vmURL(ts, "sub1", "rg1", "web") + "/runCommand" + vmAV, `{"commandId":"RunShellScript","script":["echo hi"]}`},
 		{"GET", vmURL(ts, "sub1", "rg1", "web") + "/logs" + vmAV, ""},
 		{"PUT", vmURL(ts, "sub1", "rg1", "web") + "/services/api" + vmAV, `{"properties":{"image":"nginx:alpine"}}`},

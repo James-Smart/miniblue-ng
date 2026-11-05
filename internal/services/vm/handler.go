@@ -52,6 +52,7 @@ func (h *Handler) Register(r chi.Router) {
 			r.Post("/start", h.StartVM)
 			r.Post("/powerOff", h.PowerOffVM)
 			r.Post("/restart", h.RestartVM)
+			r.Post("/deallocate", h.DeallocateVM)
 			r.Post("/runCommand", h.RunCommand)
 			r.Get("/logs", h.GetLogs)
 			r.Get("/instanceView", h.GetInstanceView)
@@ -541,7 +542,20 @@ func (h *Handler) powerAction(w http.ResponseWriter, r *http.Request, action str
 		return
 	}
 	if !h.dockerAvail {
-		dockerUnavailable(w)
+		// Without Docker there is no runtime to control, but power actions are
+		// still meaningful metadata: providers power-cycle VMs during updates
+		// and Docker-free CI must not fail those calls. Record the requested
+		// state and return the public view; operations that genuinely need a
+		// container (runCommand, logs, services, SSH) keep their 409.
+		switch action {
+		case "start", "restart":
+			getMinibluProps(rec)["powerState"] = "running"
+		case "powerOff", "deallocate":
+			getMinibluProps(rec)["powerState"] = "stopped"
+		}
+		appendProvisionEvent(rec, "power action %s completed (state %s)", action, powerState(rec))
+		h.store.Set(vmKey(sub, rg, name), rec)
+		json.NewEncoder(w).Encode(vmPublicView(rec))
 		return
 	}
 
@@ -575,7 +589,7 @@ func (h *Handler) powerAction(w http.ResponseWriter, r *http.Request, action str
 		if powerState(rec) != "running" {
 			err = start()
 		}
-	case "powerOff":
+	case "powerOff", "deallocate":
 		if powerState(rec) != "stopped" {
 			err = stop()
 		}
@@ -604,4 +618,8 @@ func (h *Handler) PowerOffVM(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RestartVM(w http.ResponseWriter, r *http.Request) {
 	h.powerAction(w, r, "restart")
+}
+
+func (h *Handler) DeallocateVM(w http.ResponseWriter, r *http.Request) {
+	h.powerAction(w, r, "deallocate")
 }
