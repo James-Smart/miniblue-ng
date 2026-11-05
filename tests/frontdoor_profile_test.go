@@ -121,7 +121,7 @@ func TestFrontDoorProfileLifecycle(t *testing.T) {
 
 	// DELETE removes the profile.
 	resp = doRequest(t, "DELETE", base+"/p1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", base+"/p1"+frontDoorAPIVersion, "")

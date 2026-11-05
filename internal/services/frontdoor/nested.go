@@ -128,7 +128,7 @@ func (n *nested) delete(w http.ResponseWriter, r *http.Request) {
 		prefix := nestedKey(sub, rg, child, profileOf(parents), parentsAfterProfile(parents), name) + ":"
 		n.store.DeleteByPrefix(prefix)
 	}
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (n *nested) list(w http.ResponseWriter, r *http.Request) {

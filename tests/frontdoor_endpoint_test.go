@@ -108,7 +108,7 @@ func TestFrontDoorEndpointLifecycle(t *testing.T) {
 
 	// DELETE then GET returns 404.
 	resp = doRequest(t, "DELETE", endpoints+"/e1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", endpoints+"/e1"+frontDoorAPIVersion, "")

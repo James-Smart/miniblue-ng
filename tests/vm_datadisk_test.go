@@ -38,7 +38,7 @@ func TestVMDiskAttachmentRoundTrip(t *testing.T) {
 
 	resp := doRequest(t, "PUT", diskBase(ts.URL)+"/data1"+diskAPIVersion,
 		`{"location":"eastus","sku":{"name":"Standard_LRS"},"properties":{"diskSizeGB":32,"creationData":{"createOption":"Empty"}}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	disk := decodeJSON(t, resp)
 	resp.Body.Close()
 	diskID, _ := disk["id"].(string)
@@ -190,7 +190,7 @@ func createManagedDisk(t *testing.T, ts *httptest.Server, name string) string {
 	t.Helper()
 	resp := doRequest(t, "PUT", diskBase(ts.URL)+"/"+name+diskAPIVersion,
 		`{"location":"eastus","sku":{"name":"Standard_LRS"},"properties":{"diskSizeGB":32,"creationData":{"createOption":"Empty"}}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	disk := decodeJSON(t, resp)
 	resp.Body.Close()
 	diskID, _ := disk["id"].(string)

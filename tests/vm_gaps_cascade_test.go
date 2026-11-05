@@ -20,7 +20,7 @@ func TestVMGapsResourceGroupCascade(t *testing.T) {
 
 	resp = doRequest(t, "PUT", diskBase(ts.URL)+"/disk1"+diskAPIVersion,
 		`{"location":"eastus","sku":{"name":"Premium_LRS"},"properties":{"diskSizeGB":64,"creationData":{"createOption":"Empty"}}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	disk := decodeJSON(t, resp)
 	resp.Body.Close()
 	diskID, _ := disk["id"].(string)
@@ -127,7 +127,7 @@ func TestVMGapsVMDeleteCascade(t *testing.T) {
 
 	resp = doRequest(t, "PUT", diskBase(ts.URL)+"/disk1"+diskAPIVersion,
 		`{"location":"eastus","sku":{"name":"StandardSSD_LRS"},"properties":{"diskSizeGB":64,"creationData":{"createOption":"Empty"}}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	disk := decodeJSON(t, resp)
 	resp.Body.Close()
 	diskID, _ := disk["id"].(string)

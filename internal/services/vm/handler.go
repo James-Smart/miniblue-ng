@@ -374,6 +374,7 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 	}
 	replaceRecord(rec, merged)
 	props := getProps(rec)
+	dropDefaultAdditionalCapabilities(props)
 	if asString(props["vmId"]) == "" {
 		props["vmId"] = uuid.NewString()
 	}

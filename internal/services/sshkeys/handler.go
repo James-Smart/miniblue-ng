@@ -123,7 +123,9 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		azerr.NotFound(w, sshKeyType, name)
 		return
 	}
-	w.WriteHeader(http.StatusAccepted)
+	// The azurerm SSH-public-key poller rejects a bare 202; the real Compute
+	// sshPublicKeys endpoint deletes synchronously, so return 204.
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {

@@ -60,7 +60,7 @@ Both `frontDoorWebApplicationFirewallPolicies` and
 ARM callers differ in casing. WAF responses always use
 `Microsoft.Network/FrontDoorWebApplicationFirewallPolicies`.
 
-All `PUT` calls return `201` for a new resource and `200` for an existing one. `PATCH` applies merge semantics and returns `200`; it never creates a resource. `DELETE` returns `202` and cascades as described below.
+All `PUT` calls return `201` for a new resource and `200` for an existing one. `PATCH` applies merge semantics and returns `200`; it never creates a resource. `DELETE` returns `204` and cascades as described below.
 
 ## Create a profile and endpoint
 

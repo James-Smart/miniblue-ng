@@ -26,7 +26,7 @@ func TestManagedDiskLifecycle(t *testing.T) {
 	}`
 
 	resp := doRequest(t, "PUT", base+"/disk1"+diskAPIVersion, body)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	disk := decodeJSON(t, resp)
 	resp.Body.Close()
 
@@ -159,7 +159,7 @@ func TestManagedDiskPUTPreservesAttachmentFields(t *testing.T) {
 
 	resp := doRequest(t, "PUT", base+"/disk1"+diskAPIVersion,
 		`{"location":"eastus","properties":{}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", base+"/disk1"+diskAPIVersion, "")

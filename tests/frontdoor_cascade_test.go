@@ -55,7 +55,7 @@ func TestFrontDoorCascadeAndResourceGroupCleanup(t *testing.T) {
 	put(base+"/p1sibling", `{"location":"global"}`)
 
 	resp := doRequest(t, "DELETE", base+"/p1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	childPaths := []string{

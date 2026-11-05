@@ -237,7 +237,7 @@ func TestFrontDoorOriginGroupAndOrigin(t *testing.T) {
 
 	// DELETE the origin group and its origins cascade away.
 	resp = doRequest(t, "DELETE", groups+"/g1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", origins+"/o1"+frontDoorAPIVersion, "")

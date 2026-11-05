@@ -21,7 +21,7 @@ func TestVMPatchPreservesUnknownPropertyBlocks(t *testing.T) {
 		"evictionPolicy":"Deallocate",
 		"diagnosticsProfile":{"bootDiagnostics":{"enabled":false}},
 		"securityProfile":{"encryptionAtHost":true},
-		"additionalCapabilities":{"ultraSSDEnabled":false},
+		"additionalCapabilities":{"ultraSSDEnabled":true},
 		"scheduledEventsProfile":{"terminateNotificationProfile":{"enable":false,"notBeforeTimeout":"PT5M"}},
 		"storageProfile":{"osDisk":{"caching":"ReadWrite","storageAccountType":"StandardSSD_LRS","diskSizeGB":64}},
 		"hardwareProfile":{"vmSize":"Standard_B2s"}
@@ -218,7 +218,7 @@ func TestVMPatchReplacesOSDisk(t *testing.T) {
 
 	resp = doRequest(t, "PUT", diskBase(ts.URL)+"/replacement"+diskAPIVersion,
 		`{"location":"eastus","sku":{"name":"Premium_LRS"},"properties":{"diskSizeGB":128,"creationData":{"createOption":"Empty"}}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	diskB := decodeJSON(t, resp)
 	resp.Body.Close()
 	diskBID, _ := diskB["id"].(string)
@@ -292,7 +292,7 @@ func TestVMPatchRejectsOSDiskAttachedToAnotherVM(t *testing.T) {
 
 	resp := doRequest(t, "PUT", diskBase(ts.URL)+"/shared"+diskAPIVersion,
 		`{"location":"eastus","sku":{"name":"Premium_LRS"},"properties":{"diskSizeGB":128,"creationData":{"createOption":"Empty"}}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	shared := decodeJSON(t, resp)
 	resp.Body.Close()
 	sharedID, _ := shared["id"].(string)

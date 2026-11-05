@@ -204,7 +204,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	deleteProfileChildren(h.store, sub, rg, name)
 	h.store.Delete(profileKey(sub, rg, name))
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {

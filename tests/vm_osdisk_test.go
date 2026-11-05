@@ -164,7 +164,7 @@ func TestVMOSDiskAttachExisting(t *testing.T) {
 
 	resp := doRequest(t, "PUT", diskBase(ts.URL)+"/existing"+diskAPIVersion,
 		`{"location":"eastus","sku":{"name":"Premium_LRS"},"properties":{"diskSizeGB":128,"creationData":{"createOption":"Empty"}}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	existing := decodeJSON(t, resp)
 	resp.Body.Close()
 	diskID, _ := existing["id"].(string)
@@ -268,7 +268,7 @@ func TestVMOSDiskRejectsDiskAttachedToAnotherVM(t *testing.T) {
 
 	resp := doRequest(t, "PUT", diskBase(ts.URL)+"/shared"+diskAPIVersion,
 		`{"location":"eastus","sku":{"name":"Premium_LRS"},"properties":{"diskSizeGB":128,"creationData":{"createOption":"Empty"}}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	disk := decodeJSON(t, resp)
 	resp.Body.Close()
 	diskID, _ := disk["id"].(string)

@@ -215,11 +215,11 @@ func TestFrontDoorSecretAndSecurityPolicy(t *testing.T) {
 
 	// DELETE both.
 	resp = doRequest(t, "DELETE", secrets+"/s1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "DELETE", securityPolicies+"/sp1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", secrets+"/s1"+frontDoorAPIVersion, "")

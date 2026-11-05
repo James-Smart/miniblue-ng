@@ -102,7 +102,7 @@ func (h *Handler) DeleteWAFPolicy(w http.ResponseWriter, r *http.Request) {
 		azerr.NotFound(w, wafPolicyType, name)
 		return
 	}
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) ListWAFPolicies(w http.ResponseWriter, r *http.Request) {

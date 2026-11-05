@@ -272,15 +272,14 @@ func (h *Handler) CreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, exists := Get(h.store, sub, rg, name)
+	existing, _ := Get(h.store, sub, rg, name)
 	rec := buildRecord(sub, rg, name, input, existing)
 	Set(h.store, sub, rg, name, rec)
 
-	status := http.StatusCreated
-	if exists {
-		status = http.StatusOK
-	}
-	writeDisk(w, status, rec)
+	// The azurerm managed-disk client's CreateOrUpdate poller rejects 201 for
+	// this API and expects a synchronous 200 (the real Compute disks endpoint
+	// behaves this way), so use 200 for both create and update.
+	writeDisk(w, http.StatusOK, rec)
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {

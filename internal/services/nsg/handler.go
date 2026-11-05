@@ -57,85 +57,85 @@ func defaultSecurityRules() []interface{} {
 		map[string]interface{}{
 			"name": "AllowVnetInBound",
 			"properties": map[string]interface{}{
-				"provisioningState":      "Succeeded",
-				"priority":               float64(65000),
-				"direction":              "Inbound",
-				"access":                 "Allow",
-				"protocol":               "*",
-				"sourceAddressPrefix":    "VirtualNetwork",
+				"provisioningState":        "Succeeded",
+				"priority":                 float64(65000),
+				"direction":                "Inbound",
+				"access":                   "Allow",
+				"protocol":                 "*",
+				"sourceAddressPrefix":      "VirtualNetwork",
 				"destinationAddressPrefix": "VirtualNetwork",
-				"sourcePortRange":        "*",
-				"destinationPortRange":   "*",
+				"sourcePortRange":          "*",
+				"destinationPortRange":     "*",
 			},
 		},
 		map[string]interface{}{
 			"name": "AllowAzureLoadBalancerInBound",
 			"properties": map[string]interface{}{
-				"provisioningState":      "Succeeded",
-				"priority":               float64(65001),
-				"direction":              "Inbound",
-				"access":                 "Allow",
-				"protocol":               "*",
-				"sourceAddressPrefix":    "AzureLoadBalancer",
+				"provisioningState":        "Succeeded",
+				"priority":                 float64(65001),
+				"direction":                "Inbound",
+				"access":                   "Allow",
+				"protocol":                 "*",
+				"sourceAddressPrefix":      "AzureLoadBalancer",
 				"destinationAddressPrefix": "*",
-				"sourcePortRange":        "*",
-				"destinationPortRange":   "*",
+				"sourcePortRange":          "*",
+				"destinationPortRange":     "*",
 			},
 		},
 		map[string]interface{}{
 			"name": "DenyAllInBound",
 			"properties": map[string]interface{}{
-				"provisioningState":      "Succeeded",
-				"priority":               float64(65500),
-				"direction":              "Inbound",
-				"access":                 "Deny",
-				"protocol":               "*",
-				"sourceAddressPrefix":    "*",
+				"provisioningState":        "Succeeded",
+				"priority":                 float64(65500),
+				"direction":                "Inbound",
+				"access":                   "Deny",
+				"protocol":                 "*",
+				"sourceAddressPrefix":      "*",
 				"destinationAddressPrefix": "*",
-				"sourcePortRange":        "*",
-				"destinationPortRange":   "*",
+				"sourcePortRange":          "*",
+				"destinationPortRange":     "*",
 			},
 		},
 		map[string]interface{}{
 			"name": "AllowVnetOutBound",
 			"properties": map[string]interface{}{
-				"provisioningState":      "Succeeded",
-				"priority":               float64(65000),
-				"direction":              "Outbound",
-				"access":                 "Allow",
-				"protocol":               "*",
-				"sourceAddressPrefix":    "VirtualNetwork",
+				"provisioningState":        "Succeeded",
+				"priority":                 float64(65000),
+				"direction":                "Outbound",
+				"access":                   "Allow",
+				"protocol":                 "*",
+				"sourceAddressPrefix":      "VirtualNetwork",
 				"destinationAddressPrefix": "VirtualNetwork",
-				"sourcePortRange":        "*",
-				"destinationPortRange":   "*",
+				"sourcePortRange":          "*",
+				"destinationPortRange":     "*",
 			},
 		},
 		map[string]interface{}{
 			"name": "AllowInternetOutBound",
 			"properties": map[string]interface{}{
-				"provisioningState":      "Succeeded",
-				"priority":               float64(65001),
-				"direction":              "Outbound",
-				"access":                 "Allow",
-				"protocol":               "*",
-				"sourceAddressPrefix":    "*",
+				"provisioningState":        "Succeeded",
+				"priority":                 float64(65001),
+				"direction":                "Outbound",
+				"access":                   "Allow",
+				"protocol":                 "*",
+				"sourceAddressPrefix":      "*",
 				"destinationAddressPrefix": "Internet",
-				"sourcePortRange":        "*",
-				"destinationPortRange":   "*",
+				"sourcePortRange":          "*",
+				"destinationPortRange":     "*",
 			},
 		},
 		map[string]interface{}{
 			"name": "DenyAllOutBound",
 			"properties": map[string]interface{}{
-				"provisioningState":      "Succeeded",
-				"priority":               float64(65500),
-				"direction":              "Outbound",
-				"access":                 "Deny",
-				"protocol":               "*",
-				"sourceAddressPrefix":    "*",
+				"provisioningState":        "Succeeded",
+				"priority":                 float64(65500),
+				"direction":                "Outbound",
+				"access":                   "Deny",
+				"protocol":                 "*",
+				"sourceAddressPrefix":      "*",
 				"destinationAddressPrefix": "*",
-				"sourcePortRange":        "*",
-				"destinationPortRange":   "*",
+				"sourcePortRange":          "*",
+				"destinationPortRange":     "*",
 			},
 		},
 	}
@@ -167,11 +167,11 @@ func buildNSGResponse(sub, rg, name string, input map[string]interface{}, securi
 		"etag":     "W/\"miniblue\"",
 		"properties": map[string]interface{}{
 			"provisioningState":    "Succeeded",
-			"resourceGuid":        uuid.New().String(),
-			"securityRules":       securityRules,
+			"resourceGuid":         uuid.New().String(),
+			"securityRules":        securityRules,
 			"defaultSecurityRules": defaultSecurityRules(),
-			"subnets":             []interface{}{},
-			"networkInterfaces":   []interface{}{},
+			"subnets":              []interface{}{},
+			"networkInterfaces":    []interface{}{},
 		},
 	}
 }
@@ -218,6 +218,28 @@ func (h *Handler) CreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 
 	k := h.nsgKey(sub, rg, name)
 	_, exists := h.store.Get(k)
+
+	// The azurerm network security group resource owns its rules inline in the
+	// NSG body (separate azurerm_network_security_rule resources use the nested
+	// route). Replace the stored set with the inline array on every PUT so a
+	// removed rule does not linger and produce a perpetual diff.
+	h.store.DeleteByPrefix(h.ruleKey(sub, rg, name, ""))
+	if props, ok := input["properties"].(map[string]interface{}); ok {
+		if inlineRules, ok := props["securityRules"].([]interface{}); ok {
+			for _, raw := range inlineRules {
+				rule, ok := raw.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				ruleName, _ := rule["name"].(string)
+				if ruleName == "" {
+					continue
+				}
+				h.store.Set(h.ruleKey(sub, rg, name, ruleName),
+					buildRuleResponse(sub, rg, name, ruleName, rule))
+			}
+		}
+	}
 
 	rules := h.store.ListByPrefix(h.ruleKey(sub, rg, name, ""))
 	nsgResp := buildNSGResponse(sub, rg, name, input, rules)

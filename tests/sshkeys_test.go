@@ -146,7 +146,7 @@ func TestSSHKeyLifecycle(t *testing.T) {
 
 	// DELETE then GET returns 404.
 	resp = doRequest(t, "DELETE", base+"/key1"+sshKeyAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", base+"/key1"+sshKeyAPIVersion, "")

@@ -165,7 +165,7 @@ func TestFrontDoorCustomDomainAndAssociation(t *testing.T) {
 
 	// Deleting the custom domain removes it from every route in the profile.
 	resp = doRequest(t, "DELETE", domains+"/www"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	for _, name := range []string{"r1", "r2", "r3"} {

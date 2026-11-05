@@ -242,12 +242,12 @@ func TestFrontDoorRouteLifecycle(t *testing.T) {
 	}
 
 	resp = doRequest(t, "DELETE", routes+"/r2"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	// DELETE removes the route.
 	resp = doRequest(t, "DELETE", routes+"/r1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", routes+"/r1"+frontDoorAPIVersion, "")

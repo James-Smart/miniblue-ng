@@ -221,7 +221,7 @@ func TestFrontDoorFirewallPolicyLifecycle(t *testing.T) {
 
 	// DELETE removes the policy and only the policy.
 	resp = doRequest(t, "DELETE", base+"/waf1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", base+"/waf1"+frontDoorAPIVersion, "")
@@ -233,7 +233,7 @@ func TestFrontDoorFirewallPolicyLifecycle(t *testing.T) {
 	resp.Body.Close()
 
 	resp = doRequest(t, "DELETE", base+"/waf2"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", capitalised+"/waf2"+frontDoorAPIVersion, "")

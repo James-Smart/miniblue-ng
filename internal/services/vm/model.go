@@ -361,6 +361,23 @@ func copyPropertyBlocks(dst, src map[string]interface{}) {
 	if osProfile, ok := dst["osProfile"].(map[string]interface{}); ok {
 		delete(osProfile, "adminPassword")
 	}
+	dropDefaultAdditionalCapabilities(dst)
+}
+
+// dropDefaultAdditionalCapabilities removes the all-false block that the
+// provider sends even when additional_capabilities is absent from the config.
+// Azure omits the block in that case; echoing it would create a perpetual
+// plan diff.
+func dropDefaultAdditionalCapabilities(props map[string]interface{}) {
+	capabilities, ok := props["additionalCapabilities"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	ultra, _ := capabilities["ultraSSDEnabled"].(bool)
+	hibernation, _ := capabilities["hibernationEnabled"].(bool)
+	if !ultra && !hibernation {
+		delete(props, "additionalCapabilities")
+	}
 }
 
 // applyOSDisk fills storageProfile.osDisk with the effective OS disk fields,

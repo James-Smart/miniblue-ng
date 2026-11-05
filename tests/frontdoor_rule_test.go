@@ -168,7 +168,7 @@ func TestFrontDoorRuleSetAndRule(t *testing.T) {
 
 	// DELETE the rule set cascades to its rules.
 	resp = doRequest(t, "DELETE", ruleSets+"/rs1"+frontDoorAPIVersion, "")
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 	resp.Body.Close()
 
 	resp = doRequest(t, "GET", rules+"/r1"+frontDoorAPIVersion, "")

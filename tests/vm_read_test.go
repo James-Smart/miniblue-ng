@@ -37,7 +37,7 @@ func TestVMReadIncludesInstanceViewAndRoundTripsProperties(t *testing.T) {
 		"evictionPolicy":"Deallocate",
 		"diagnosticsProfile":{"bootDiagnostics":{"enabled":false}},
 		"securityProfile":{"encryptionAtHost":true},
-		"additionalCapabilities":{"ultraSSDEnabled":false},
+		"additionalCapabilities":{"ultraSSDEnabled":true},
 		"scheduledEventsProfile":{"terminateNotificationProfile":{"enable":false,"notBeforeTimeout":"PT5M"}}
 	}}`
 	resp := doRequest(t, "PUT", vmURL(ts, "sub1", "rg1", "web")+vmAV, body)
@@ -190,4 +190,21 @@ func TestVMUpdateRoundTripsTopLevelFields(t *testing.T) {
 	got := decodeJSON(t, resp)
 	resp.Body.Close()
 	checkTopLevel("GET response", got)
+}
+
+func TestVMReadOmitsDefaultAdditionalCapabilities(t *testing.T) {
+	ts := setupVMServer(t)
+	defer ts.Close()
+	createRG(t, ts, "sub1", "rg1")
+
+	body := `{"location":"eastus","properties":{"additionalCapabilities":{"ultraSSDEnabled":false,"hibernationEnabled":false}}}`
+	resp := doRequest(t, "PUT", vmURL(ts, "sub1", "rg1", "defaults")+vmAV, body)
+	expectStatus(t, resp, 201)
+	m := decodeJSON(t, resp)
+	resp.Body.Close()
+
+	props := m["properties"].(map[string]interface{})
+	if _, ok := props["additionalCapabilities"]; ok {
+		t.Fatalf("expected default additionalCapabilities to be omitted, got %v", props["additionalCapabilities"])
+	}
 }
