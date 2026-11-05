@@ -151,6 +151,22 @@ func (h *Handler) detachVMDisks(rec map[string]interface{}) {
 	}
 }
 
+// osDiskBlock returns a deep copy of the VM's storageProfile.osDisk block
+// without creating one. It is used to snapshot the block before an update so an
+// explicit null can restore it unchanged.
+func osDiskBlock(rec map[string]interface{}) map[string]interface{} {
+	props, _ := rec["properties"].(map[string]interface{})
+	if props == nil {
+		return nil
+	}
+	storage, _ := props["storageProfile"].(map[string]interface{})
+	if storage == nil {
+		return nil
+	}
+	osDisk, _ := storage["osDisk"].(map[string]interface{})
+	return cloneMap(osDisk)
+}
+
 // osDiskManagedDiskID returns the managed disk ID referenced by the VM's OS
 // disk, or "" when the VM has no managed OS disk.
 func osDiskManagedDiskID(rec map[string]interface{}) string {
@@ -257,20 +273,16 @@ func resetOSDiskForReplacement(rec map[string]interface{}) {
 	}
 }
 
-// restoreOSDiskReference puts the previous OS disk reference back after an
-// update removed it with an explicit null. An empty managed-disk ID means
-// "keep the existing disk", never "generate a new one".
-func restoreOSDiskReference(rec map[string]interface{}, id, name string) {
-	osDisk := vmOSDisk(rec)
-	md, _ := osDisk["managedDisk"].(map[string]interface{})
-	if md == nil {
-		md = map[string]interface{}{}
-		osDisk["managedDisk"] = md
+// restoreOSDiskBlock puts the previous storageProfile.osDisk block back after an
+// update removed it (or its managed-disk reference) with an explicit null. An
+// empty managed-disk ID means "keep the existing disk", never "generate a new
+// one", so every disk-derived field (name, size, OS type, SKU, caching and
+// create option) must be restored, not just the reference.
+func restoreOSDiskBlock(rec, oldOSDisk map[string]interface{}) {
+	if oldOSDisk == nil {
+		return
 	}
-	md["id"] = id
-	if name != "" {
-		osDisk["name"] = name
-	}
+	vmStorageProfile(rec)["osDisk"] = cloneMap(oldOSDisk)
 }
 
 // vmStorageProfile returns the VM's storageProfile block, creating it when the

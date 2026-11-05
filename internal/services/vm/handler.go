@@ -318,7 +318,7 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 	}
 
 	oldDiskID := osDiskManagedDiskID(rec)
-	oldDiskName := osDiskName(rec)
+	oldOSDisk := osDiskBlock(rec)
 	newDiskID, explicitDisk := osDiskIDFromPatch(propsPatch)
 	if !explicitDisk {
 		newDiskID = oldDiskID
@@ -357,8 +357,9 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 		}
 		appendProvisionEvent(rec, "OS disk %s attached", osDiskName(rec))
 	} else if oldDiskID != "" && osDiskManagedDiskID(rec) != oldDiskID {
-		// An explicit null must not orphan or regenerate the existing disk.
-		restoreOSDiskReference(rec, oldDiskID, oldDiskName)
+		// An explicit null must not orphan or regenerate the existing disk, and
+		// it must not drop the disk-derived fields either.
+		restoreOSDiskBlock(rec, oldOSDisk)
 	}
 
 	h.refreshVM(rec)

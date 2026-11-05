@@ -2,6 +2,8 @@ package tests
 
 import (
 	"encoding/json"
+	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -342,5 +344,147 @@ func TestVMPatchRejectsOSDiskAttachedToAnotherVM(t *testing.T) {
 	if sharedProps["managedBy"] != vmAID || sharedProps["diskState"] != "Attached" {
 		t.Fatalf("expected shared disk to stay attached to %q, got managedBy=%v diskState=%v",
 			vmAID, sharedProps["managedBy"], sharedProps["diskState"])
+	}
+}
+
+// createVMWithFullOSDisk creates a VM whose generated OS disk exposes every
+// field the provider reads back, and returns the VM model.
+func createVMWithFullOSDisk(t *testing.T, ts *httptest.Server, name string) map[string]interface{} {
+	t.Helper()
+	body := `{"location":"eastus","properties":{
+		"storageProfile":{"osDisk":{
+			"caching":"ReadOnly",
+			"createOption":"FromImage",
+			"storageAccountType":"Premium_LRS",
+			"diskSizeGB":64
+		}},
+		"hardwareProfile":{"vmSize":"Standard_B2s"}
+	}}`
+	resp := doRequest(t, "PUT", vmURL(ts, "sub1", "rg1", name)+vmAV, body)
+	expectStatus(t, resp, 201)
+	m := decodeJSON(t, resp)
+	resp.Body.Close()
+	return m
+}
+
+func osDiskOf(t *testing.T, vm map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	props, ok := vm["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected properties object, got %T", vm["properties"])
+	}
+	storage, ok := props["storageProfile"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected storageProfile object, got %T", props["storageProfile"])
+	}
+	osDisk, ok := storage["osDisk"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected storageProfile.osDisk object, got %T", storage["osDisk"])
+	}
+	return osDisk
+}
+
+// assertOSDiskUnchanged checks the full osDisk block the provider depends on,
+// including the disk-derived fields applyOSDisk normally fills on creation.
+func assertOSDiskUnchanged(t *testing.T, before, after map[string]interface{}) {
+	t.Helper()
+	for _, field := range []string{"name", "diskSizeGB", "osType", "createOption", "caching"} {
+		if !reflect.DeepEqual(after[field], before[field]) {
+			t.Fatalf("expected osDisk.%s %v to be preserved, got %v", field, before[field], after[field])
+		}
+	}
+	beforeMD, ok := before["managedDisk"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected managedDisk object before the update, got %T", before["managedDisk"])
+	}
+	afterMD, ok := after["managedDisk"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected managedDisk object after the update, got %T", after["managedDisk"])
+	}
+	for _, field := range []string{"id", "storageAccountType"} {
+		if !reflect.DeepEqual(afterMD[field], beforeMD[field]) {
+			t.Fatalf("expected managedDisk.%s %v to be preserved, got %v", field, beforeMD[field], afterMD[field])
+		}
+	}
+}
+
+// TestVMPatchNullOSDiskKeepsDiskFields verifies that nulling the whole
+// storageProfile.osDisk block keeps the existing OS disk reference and all of
+// its disk-derived fields instead of orphaning the disk or reducing it to an ID.
+func TestVMPatchNullOSDiskKeepsDiskFields(t *testing.T) {
+	ts := setupVMServer(t)
+	defer ts.Close()
+	createRG(t, ts, "sub1", "rg1")
+
+	created := createVMWithFullOSDisk(t, ts, "vm-null-osdisk")
+	before := osDiskOf(t, created)
+	vmID, _ := created["properties"].(map[string]interface{})["vmId"].(string)
+	diskID, _ := before["managedDisk"].(map[string]interface{})["id"].(string)
+	if vmID == "" || diskID == "" {
+		t.Fatalf("expected generated vmId and disk id, got vmId=%q diskID=%q", vmID, diskID)
+	}
+
+	resp := doRequest(t, "PATCH", vmURL(ts, "sub1", "rg1", "vm-null-osdisk")+vmAV,
+		`{"properties":{"storageProfile":{"osDisk":null}}}`)
+	expectStatus(t, resp, 200)
+	patched := decodeJSON(t, resp)
+	resp.Body.Close()
+	assertOSDiskUnchanged(t, before, osDiskOf(t, patched))
+
+	resp = doRequest(t, "GET", vmURL(ts, "sub1", "rg1", "vm-null-osdisk")+vmAV, "")
+	expectStatus(t, resp, 200)
+	got := decodeJSON(t, resp)
+	resp.Body.Close()
+	assertOSDiskUnchanged(t, before, osDiskOf(t, got))
+
+	// "Keep the existing disk" means it stays attached to this VM.
+	resp = doRequest(t, "GET", ts.URL+diskID+diskAPIVersion, "")
+	expectStatus(t, resp, 200)
+	disk := decodeJSON(t, resp)
+	resp.Body.Close()
+	diskProps := disk["properties"].(map[string]interface{})
+	if diskProps["managedBy"] != vmID || diskProps["diskState"] != "Attached" {
+		t.Fatalf("expected OS disk to stay attached to %q, got managedBy=%v diskState=%v",
+			vmID, diskProps["managedBy"], diskProps["diskState"])
+	}
+}
+
+// TestVMPatchNullManagedDiskKeepsDiskFields verifies that nulling only
+// storageProfile.osDisk.managedDisk restores the full managed-disk block,
+// including storageAccountType, rather than recreating it with just an ID.
+func TestVMPatchNullManagedDiskKeepsDiskFields(t *testing.T) {
+	ts := setupVMServer(t)
+	defer ts.Close()
+	createRG(t, ts, "sub1", "rg1")
+
+	created := createVMWithFullOSDisk(t, ts, "vm-null-manageddisk")
+	before := osDiskOf(t, created)
+	vmID, _ := created["properties"].(map[string]interface{})["vmId"].(string)
+	diskID, _ := before["managedDisk"].(map[string]interface{})["id"].(string)
+	if vmID == "" || diskID == "" {
+		t.Fatalf("expected generated vmId and disk id, got vmId=%q diskID=%q", vmID, diskID)
+	}
+
+	resp := doRequest(t, "PATCH", vmURL(ts, "sub1", "rg1", "vm-null-manageddisk")+vmAV,
+		`{"properties":{"storageProfile":{"osDisk":{"managedDisk":null}}}}`)
+	expectStatus(t, resp, 200)
+	patched := decodeJSON(t, resp)
+	resp.Body.Close()
+	assertOSDiskUnchanged(t, before, osDiskOf(t, patched))
+
+	resp = doRequest(t, "GET", vmURL(ts, "sub1", "rg1", "vm-null-manageddisk")+vmAV, "")
+	expectStatus(t, resp, 200)
+	got := decodeJSON(t, resp)
+	resp.Body.Close()
+	assertOSDiskUnchanged(t, before, osDiskOf(t, got))
+
+	resp = doRequest(t, "GET", ts.URL+diskID+diskAPIVersion, "")
+	expectStatus(t, resp, 200)
+	disk := decodeJSON(t, resp)
+	resp.Body.Close()
+	diskProps := disk["properties"].(map[string]interface{})
+	if diskProps["managedBy"] != vmID || diskProps["diskState"] != "Attached" {
+		t.Fatalf("expected OS disk to stay attached to %q, got managedBy=%v diskState=%v",
+			vmID, diskProps["managedBy"], diskProps["diskState"])
 	}
 }
