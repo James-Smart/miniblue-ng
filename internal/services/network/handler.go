@@ -74,6 +74,17 @@ func (h *Handler) Register(r chi.Router) {
 		})
 	})
 	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Network/virtualNetworks", h.ListVNetsInSubscription)
+
+	r.Route("/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces", func(r chi.Router) {
+		r.Get("/", h.ListNetworkInterfaces)
+		r.Route("/{nicName}", func(r chi.Router) {
+			r.Put("/", h.CreateOrUpdateNIC)
+			r.Get("/", h.GetNetworkInterface)
+			r.Patch("/", h.PatchNetworkInterface)
+			r.Delete("/", h.DeleteNetworkInterface)
+		})
+	})
+	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Network/networkInterfaces", h.ListNetworkInterfacesInSubscription)
 }
 
 func (h *Handler) ListVNetsInSubscription(w http.ResponseWriter, r *http.Request) {
