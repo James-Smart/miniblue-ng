@@ -242,6 +242,12 @@ func (h *Handler) validateOSDiskForVM(id, vmID string) error {
 // detachOSDiskByID detaches a disk from the VM, unless it belongs to another
 // VM (in which case it is left alone).
 func (h *Handler) detachOSDiskByID(id, vmID string) {
+	h.detachDiskByID(id, vmID)
+}
+
+// detachDiskByID clears a managed disk's link to the VM, unless it belongs to a
+// different VM.
+func (h *Handler) detachDiskByID(id, vmID string) {
 	if id == "" {
 		return
 	}
@@ -258,6 +264,125 @@ func (h *Handler) detachOSDiskByID(id, vmID string) {
 		return
 	}
 	disks.Detach(h.store, sub, rg, name)
+}
+
+// syncDataDisks reconciles storageProfile.dataDisks with managed-disk
+// attachments. Disks referenced by the new record are created when missing and
+// attached to the VM; disks that were referenced before but are gone from the
+// new record are detached. The OS disk is never touched.
+func (h *Handler) syncDataDisks(vmID string, oldRec, newRec map[string]interface{}) {
+	if vmID == "" {
+		return
+	}
+
+	oldIDs := make(map[string]bool)
+	for _, entry := range dataDiskEntries(oldRec) {
+		if id := dataDiskManagedDiskID(entry); id != "" {
+			oldIDs[id] = true
+		}
+	}
+
+	keptIDs := make(map[string]bool)
+	for _, entry := range dataDiskEntries(newRec) {
+		id := dataDiskManagedDiskID(entry)
+		if id == "" {
+			continue
+		}
+		keptIDs[id] = true
+
+		sub, rg, name, ok := disks.ParseID(id)
+		if !ok {
+			continue
+		}
+		diskRec, found := disks.Get(h.store, sub, rg, name)
+		if !found {
+			diskRec = dataDiskRecord(newRec, entry, sub, rg, name)
+			disks.Set(h.store, sub, rg, name, diskRec)
+		}
+		diskProps, _ := diskRec["properties"].(map[string]interface{})
+		if managedBy := asString(diskProps["managedBy"]); managedBy != "" && managedBy != vmID {
+			// Never steal a disk attached to another VM.
+			continue
+		}
+		disks.Attach(h.store, sub, rg, name, vmID)
+	}
+
+	for id := range oldIDs {
+		if keptIDs[id] {
+			continue
+		}
+		h.detachDiskByID(id, vmID)
+	}
+}
+
+// dataDiskEntries returns the VM record's storageProfile.dataDisks entries as
+// maps, ignoring entries that are not JSON objects.
+func dataDiskEntries(rec map[string]interface{}) []map[string]interface{} {
+	if rec == nil {
+		return nil
+	}
+	props, _ := rec["properties"].(map[string]interface{})
+	if props == nil {
+		return nil
+	}
+	storage, _ := props["storageProfile"].(map[string]interface{})
+	if storage == nil {
+		return nil
+	}
+	raw, _ := storage["dataDisks"].([]interface{})
+	out := make([]map[string]interface{}, 0, len(raw))
+	for _, item := range raw {
+		if entry, ok := item.(map[string]interface{}); ok && entry != nil {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+// dataDiskManagedDiskID returns the managed disk ID referenced by a VM data
+// disk entry, or "" when the entry has no managed disk.
+func dataDiskManagedDiskID(entry map[string]interface{}) string {
+	md, _ := entry["managedDisk"].(map[string]interface{})
+	if md == nil {
+		return ""
+	}
+	return asString(md["id"])
+}
+
+// dataDiskRecord builds a managed-disk record for a data disk that the VM
+// references but that does not exist yet. Azure's default create option for an
+// attached data disk is Attach.
+func dataDiskRecord(vmRec, entry map[string]interface{}, sub, rg, name string) map[string]interface{} {
+	sku := "Standard_LRS"
+	if md, _ := entry["managedDisk"].(map[string]interface{}); md != nil {
+		if requested := asString(md["storageAccountType"]); requested != "" {
+			sku = requested
+		}
+	}
+
+	creationData, _ := entry["creationData"].(map[string]interface{})
+	creationData = cloneMap(creationData)
+	if creationData == nil {
+		creationData = map[string]interface{}{}
+	}
+	if asString(creationData["createOption"]) == "" {
+		creationData["createOption"] = "Attach"
+	}
+
+	diskProps := map[string]interface{}{
+		"creationData": creationData,
+	}
+	if size, ok := asNumber(entry["diskSizeGB"]); ok && size > 0 {
+		diskProps["diskSizeGB"] = size
+	}
+
+	return disks.NewRecord(sub, rg, name, map[string]interface{}{
+		"location": asString(vmRec["location"]),
+		"sku": map[string]interface{}{
+			"name": sku,
+		},
+		"properties": diskProps,
+	})
 }
 
 // resetOSDiskForReplacement drops fields derived from the previous OS disk so

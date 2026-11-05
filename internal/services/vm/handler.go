@@ -209,6 +209,7 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 		azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
+	h.syncDataDisks(asString(getProps(rec)["vmId"]), nil, rec)
 	getProps(rec)["instanceView"] = instanceViewFor(rec)
 	appendProvisionEvent(rec, "OS disk %s attached", osDiskName(rec))
 
@@ -281,6 +282,7 @@ func (h *Handler) PatchVM(w http.ResponseWriter, r *http.Request) {
 // Identity and OS-disk references are validated before the record is mutated,
 // so a rejected update leaves the VM and its disks untouched.
 func (h *Handler) updateVM(rec, input map[string]interface{}) error {
+	oldRec := cloneMap(rec)
 	vmID := ""
 	if props, _ := rec["properties"].(map[string]interface{}); props != nil {
 		vmID = asString(props["vmId"])
@@ -361,6 +363,8 @@ func (h *Handler) updateVM(rec, input map[string]interface{}) error {
 		// it must not drop the disk-derived fields either.
 		restoreOSDiskBlock(rec, oldOSDisk)
 	}
+
+	h.syncDataDisks(asString(getProps(rec)["vmId"]), oldRec, rec)
 
 	h.refreshVM(rec)
 	appendProvisionEvent(rec, "virtual machine updated")
