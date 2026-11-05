@@ -408,10 +408,10 @@ Add these alongside the existing VM routes:
   Docker is unavailable: they update the stored power state and return `200`
   instead of `409 DockerUnavailable`. This is a deliberate change from today's
   behaviour so provider updates that power-cycle a VM still work in Docker-free
-  CI. `runCommand`, logs, deploy/list/delete services and SSH still require
-  Docker and keep returning `409`. The existing
-  `TestVMRuntimeOperationsRequireDocker` must be updated to assert the new
-  split.
+  CI. `runCommand`, logs, service deploy and SSH still require Docker and keep
+  returning `409`. Service list/delete remain metadata-only, matching the
+  existing handler. The existing `TestVMRuntimeOperationsRequireDocker` must be
+  updated to assert the new split.
 
 ---
 
@@ -956,7 +956,8 @@ Add `tests/frontdoor_test.go`:
   - Custom data: base64 shell scripts only; `#cloud-config` is skipped;
     execution status is under `properties.miniblue.customData`.
   - Stub mode: power actions update metadata and succeed; `runCommand`, logs,
-    services and SSH still return `409 DockerUnavailable`.
+    service deploy and SSH still return `409 DockerUnavailable`; service
+    list/delete remain metadata-only.
   - Remove the old "provisioning extensions, custom-data scripts ... are not
     emulated" limitation.
 - Update `website/docs/services/virtual-networks.md` with NIC support (or add
