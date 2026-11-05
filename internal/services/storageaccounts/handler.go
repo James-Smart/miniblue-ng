@@ -36,6 +36,7 @@ func (h *Handler) Register(r chi.Router) {
 			r.Get("/", h.GetStorageAccount)
 			r.Delete("/", h.DeleteStorageAccount)
 			r.Post("/listKeys", h.ListKeys)
+			r.Get("/accountMigrations/default", h.GetAccountMigrationStatus)
 
 			// Blob service
 			r.Get("/blobServices/default", h.GetBlobServiceProperties)
@@ -91,9 +92,22 @@ func (h *Handler) CreateOrUpdateStorageAccount(w http.ResponseWriter, r *http.Re
 		if sku, ok := input["sku"].(map[string]interface{}); ok {
 			acct["sku"] = sku
 		}
+		if inProps, ok := input["properties"].(map[string]interface{}); ok {
+			props, _ := acct["properties"].(map[string]interface{})
+			for k, v := range inProps {
+				props[k] = v
+			}
+		}
 	}
 	if acct["tags"] == nil {
 		acct["tags"] = map[string]interface{}{}
+	}
+	props, _ := acct["properties"].(map[string]interface{})
+	if props["minimumTlsVersion"] == nil {
+		props["minimumTlsVersion"] = "TLS1_2"
+	}
+	if props["publicNetworkAccess"] == nil {
+		props["publicNetworkAccess"] = "Enabled"
 	}
 	h.store.Set(k, acct)
 	storageauth.PersistSharedKeyContext(h.store, sub, rg, name)
@@ -127,7 +141,9 @@ func (h *Handler) DeleteStorageAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	storageauth.DeleteSharedKeyContext(h.store, name)
-	w.WriteHeader(http.StatusAccepted)
+	// The azurerm 5.x storage client accepts 200/204 here and rejects a bare
+	// 202; the real Storage RP deletes synchronously.
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListKeys implements POST .../storageAccounts/{accountName}/listKeys (Azure Storage RP).
@@ -148,6 +164,41 @@ func (h *Handler) ListKeys(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{"keys": keys})
+}
+
+// GetAccountMigrationStatus implements GET .../storageAccounts/{accountName}/accountMigrations/default.
+// azurerm 5.x reads this after storage account create/update to confirm the migration state.
+func (h *Handler) GetAccountMigrationStatus(w http.ResponseWriter, r *http.Request) {
+	sub := chi.URLParam(r, "subscriptionId")
+	rg := chi.URLParam(r, "resourceGroupName")
+	name := chi.URLParam(r, "accountName")
+
+	acct, ok := h.store.Get(h.storageAccountKey(sub, rg, name))
+	if !ok {
+		azerr.NotFound(w, "Microsoft.Storage/storageAccounts", name)
+		return
+	}
+
+	targetSkuName := "Standard_LRS"
+	if acctMap, ok := acct.(map[string]interface{}); ok {
+		if sku, ok := acctMap["sku"].(map[string]interface{}); ok {
+			if skuName, ok := sku["name"].(string); ok && skuName != "" {
+				targetSkuName = skuName
+			}
+		}
+	}
+
+	id := "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.Storage/storageAccounts/" + name + "/accountMigrations/default"
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":   id,
+		"name": "default",
+		"type": "Microsoft.Storage/storageAccounts/accountMigrations",
+		"properties": map[string]interface{}{
+			"migrationStatus": "Complete",
+			"targetSkuName":   targetSkuName,
+		},
+	})
 }
 
 func (h *Handler) ListStorageAccounts(w http.ResponseWriter, r *http.Request) {
@@ -243,6 +294,8 @@ func (h *Handler) buildStorageAccountResponse(sub, rg, name string) map[string]i
 			"primaryLocation":          "eastus",
 			"statusOfPrimary":          "available",
 			"supportsHttpsTrafficOnly": true,
+			"minimumTlsVersion":        "TLS1_2",
+			"publicNetworkAccess":      "Enabled",
 			"creationTime":             "2026-01-01T00:00:00Z",
 		},
 	}

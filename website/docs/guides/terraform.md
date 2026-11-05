@@ -80,6 +80,39 @@ Key settings explained:
 | `tenant_id` | Any UUID | miniblue accepts any tenant ID |
 | `client_id` / `client_secret` | Any string | miniblue does not validate credentials |
 
+### azurerm 5.x
+
+azurerm 5.x removed `skip_provider_registration`, and its Key Vault schema
+requires `rbac_authorization_enabled`. Use this provider block:
+
+```hcl
+terraform {
+  required_version = ">= 1.8"
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+
+  metadata_host = "localhost:4567"
+
+  subscription_id = "00000000-0000-0000-0000-000000000000"
+  tenant_id       = "00000000-0000-0000-0000-000000000001"
+  client_id       = "miniblue"
+  client_secret   = "miniblue"
+}
+```
+
+`examples/terraform/azurerm5` exercises the 5.x compatibility paths:
+camel-case resource-group routes, public IP FQDN derivation, storage-account
+migration-status read-back, and Key Vault ARM CRUD with soft-delete purge.
+
 ## Step 3: Full example
 
 This creates a resource group, virtual network, subnet, DNS zone, and container registry -- all locally.

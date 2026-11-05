@@ -81,7 +81,7 @@ internal/
     eventgrid/    Event Grid (ARM + data plane)
     functions/    Azure Functions (ARM stub)
     identity/     Managed Identity (IMDS)
-    keyvault/     Key Vault (data plane)
+    keyvault/     Key Vault (ARM + data plane)
     metadata/     Cloud metadata endpoint
     network/      Virtual Networks + Subnets (ARM)
     queue/        Queue Storage (data plane)

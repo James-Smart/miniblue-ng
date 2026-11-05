@@ -31,13 +31,14 @@ What's implemented, stubbed, and unsupported in miniblue compared to real Azure 
 | Managed Disks | Full | Full | Full | Full | Full (PATCH) | Attachment tracking, OS/data disk lifecycle, delete blocked while attached |
 | SSH Public Keys | Full | Full | Full | Full | Full (PATCH) | Generated RSA key pairs, `generateKeyPair` action |
 | Network Interfaces | Full | Full | Full | Full | Full (PATCH) | Dynamic private IP allocation, VM link tracking |
-| Public IP Addresses | Full | Full | Full | Full | - | Static/dynamic allocation, auto-generated IPs |
+| Public IP Addresses | Full | Full | Full | Full | - | Static/dynamic allocation, auto-generated IPs, DNS label to FQDN |
 | Network Security Groups | Full | Full | Full | Full | - | Security rules, default rules, cascade delete |
 | Load Balancer | Full | Full | Full | Full | - | Frontends, backends, rules, probes, NAT |
 | Application Gateway | Full | Full | Full | Full | - | SKU, frontends, backends, listeners, rules, probes, WAF |
 | Front Door | Full | Full | Full | Full | Full (PATCH) | Profile tree: endpoints/routes, origin groups/origins, rule sets/rules, custom domains, secrets and security policies; metadata only |
 | Front Door WAF Policy | Full | Full | Full | Full | Full (PATCH) | Resource-group scoped `Microsoft.Network` policy; no request inspection |
-| Storage Accounts | Full | Full | Full | Full | - | Shared key auth, blob/queue/table/file endpoints |
+| Key Vault | Full | Full | Full | Full | Full (PATCH) | Vault ARM CRUD, soft-delete/purge; secrets data plane |
+| Storage Accounts | Full | Full | Full | Full | - | Shared key auth, blob/queue/table/file endpoints, migration-status read |
 | Subscriptions | Full | Full | - | - | - | Mock subscription |
 | Tenants | - | - | Full | - | - | Mock tenant |
 | Providers | Full | Full | Full | - | - | Registration always succeeds |

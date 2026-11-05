@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 
 	"github.com/go-chi/chi/v5"
@@ -46,6 +47,42 @@ func (h *Handler) ListInSubscription(w http.ResponseWriter, r *http.Request) {
 func nextIP() string {
 	n := atomic.AddUint32(&ipCounter, 1)
 	return fmt.Sprintf("20.0.%d.%d", (n/256)%256, n%256)
+}
+
+func normalizeLocation(location string) string {
+	normalized := strings.ToLower(strings.ReplaceAll(location, " ", ""))
+	if normalized == "" {
+		return "eastus"
+	}
+	return normalized
+}
+
+func buildDNSSettings(props map[string]interface{}, location string) interface{} {
+	raw, ok := props["dnsSettings"]
+	if !ok || raw == nil {
+		return raw
+	}
+
+	dns, ok := raw.(map[string]interface{})
+	if !ok {
+		return raw
+	}
+
+	label, _ := dns["domainNameLabel"].(string)
+	if label == "" {
+		return dns
+	}
+
+	if fqdn, _ := dns["fqdn"].(string); fqdn != "" {
+		return dns
+	}
+
+	out := make(map[string]interface{}, len(dns)+1)
+	for k, v := range dns {
+		out[k] = v
+	}
+	out["fqdn"] = fmt.Sprintf("%s.%s.cloudapp.azure.com", label, normalizeLocation(location))
+	return out
 }
 
 func buildResponse(sub, rg, name string, input map[string]interface{}, existingIP string) map[string]interface{} {
@@ -99,13 +136,13 @@ func buildResponse(sub, rg, name string, input map[string]interface{}, existingI
 		"tags":     tags,
 		"sku":      sku,
 		"properties": map[string]interface{}{
-			"provisioningState":       "Succeeded",
+			"provisioningState":        "Succeeded",
 			"publicIPAllocationMethod": allocationMethod,
-			"publicIPAddressVersion":  addressVersion,
-			"ipAddress":               ipAddress,
-			"idleTimeoutInMinutes":    idleTimeout,
-			"ipConfiguration":         nil,
-			"dnsSettings":             props["dnsSettings"],
+			"publicIPAddressVersion":   addressVersion,
+			"ipAddress":                ipAddress,
+			"idleTimeoutInMinutes":     idleTimeout,
+			"ipConfiguration":          nil,
+			"dnsSettings":              buildDNSSettings(props, location),
 		},
 	}
 }

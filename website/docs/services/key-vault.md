@@ -1,8 +1,50 @@
 # Key Vault
 
-miniblue emulates Azure Key Vault secret management. Create, read, list, and delete secrets without an Azure subscription.
+miniblue emulates Azure Key Vault management-plane vaults and data-plane
+secrets. azurerm 5.x can create, read, update and delete a vault, and the
+vault's `vault_uri` points back to miniblue's local secret API.
 
-## API endpoints
+## ARM management endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `PUT` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{name}` | Create or update |
+| `GET` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{name}` | Get |
+| `PATCH` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{name}` | Update |
+| `DELETE` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{name}` | Soft-delete |
+| `GET` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults` | List |
+| `GET` | `/subscriptions/{sub}/providers/Microsoft.KeyVault/locations/{location}/deletedVaults/{name}` | Get soft-deleted vault |
+| `POST` | `/subscriptions/{sub}/providers/Microsoft.KeyVault/locations/{location}/deletedVaults/{name}/purge` | Purge soft-deleted vault |
+
+Vault `properties` are preserved across `PUT`/`PATCH`, including `tenantId`,
+`sku`, access policies, network ACLs and tags. `provisioningState` is always
+`Succeeded`, and `vaultUri` is generated as
+`<scheme>://<metadata-host>/keyvault/<vault>`.
+
+`DELETE` creates a location-scoped soft-delete tombstone. The azurerm default
+`purge_soft_delete_on_destroy` feature calls the purge endpoint during destroy;
+miniblue completes that operation synchronously.
+
+## OpenTofu example
+
+```hcl
+resource "azurerm_key_vault" "example" {
+  name                = "example-kv"
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+  tenant_id           = "00000000-0000-0000-0000-000000000001"
+  sku_name            = "standard"
+
+  # Required by azurerm 5.x.
+  rbac_authorization_enabled = false
+
+  # Optional: skips the provider's data-plane readiness poll, so local applies
+  # finish quickly. The ARM create/read path is the same either way.
+  public_network_access_enabled = false
+}
+```
+
+## Secret data-plane endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -84,7 +126,9 @@ Response: `200 OK`
 
 ## Multiple vaults
 
-Vaults are separated by name. No explicit vault creation is needed -- secrets are scoped to whatever vault name you use in the URL.
+Vaults are separated by name. The data-plane API does not require explicit
+vault creation -- secrets are scoped to whatever vault name you use in the
+URL. ARM-created vaults and data-plane vault names share the same namespace.
 
 ```bash
 # Different vaults, same secret name

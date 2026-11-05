@@ -149,7 +149,7 @@ func TestBlobARMStorageAccountDelete(t *testing.T) {
 
 	resp := doRequest(t, "DELETE", base, "")
 	defer resp.Body.Close()
-	expectStatus(t, resp, 202)
+	expectStatus(t, resp, 204)
 
 	resp2 := doRequest(t, "GET", base, "")
 	defer resp2.Body.Close()

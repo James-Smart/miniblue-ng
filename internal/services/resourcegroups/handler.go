@@ -32,19 +32,23 @@ func NewHandler(s *store.Store) *Handler {
 }
 
 func (h *Handler) Register(r chi.Router) {
-	r.Route("/subscriptions/{subscriptionId}/resourcegroups", func(r chi.Router) {
-		r.Get("/", h.List)
-		r.Route("/{resourceGroupName}", func(r chi.Router) {
-			r.Put("/", h.CreateOrUpdate)
-			r.Patch("/", h.Update)
-			r.Get("/", h.Get)
-			r.Delete("/", h.Delete)
-			r.Head("/", h.CheckExistence)
-			r.Get("/resources", h.ListResources)
+	// ARM treats the 'resourceGroups' segment case-insensitively, but chi routes
+	// are case-sensitive. Register both spellings so older clients using
+	// 'resourcegroups' keep working while azurerm 5.x's 'resourceGroups' calls
+	// resolve too.
+	for _, segment := range []string{"resourcegroups", "resourceGroups"} {
+		r.Route("/subscriptions/{subscriptionId}/"+segment, func(r chi.Router) {
+			r.Get("/", h.List)
+			r.Route("/{resourceGroupName}", func(r chi.Router) {
+				r.Put("/", h.CreateOrUpdate)
+				r.Patch("/", h.Update)
+				r.Get("/", h.Get)
+				r.Delete("/", h.Delete)
+				r.Head("/", h.CheckExistence)
+				r.Get("/resources", h.ListResources)
+			})
 		})
-	})
-	// Case-sensitive duplicate (Azure ARM is case-insensitive on 'resourceGroups')
-	r.Get("/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/resources", h.ListResources)
+	}
 	// Async operation status polling endpoint
 	r.Get("/subscriptions/{subscriptionId}/operationresults/*", h.OperationResult)
 }
@@ -193,6 +197,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	h.store.DeleteByPrefix("appgw:" + p)
 	h.store.DeleteByPrefix("blob:account:" + p)
 	h.store.DeleteByPrefix("blob:armcontainer:" + p)
+	h.store.DeleteByPrefix("keyvault:vault:" + p)
 	h.store.DeleteByPrefix("cosmos:account:" + p)
 	h.store.DeleteByPrefix("cosmos:sqldb:" + p)
 	h.store.DeleteByPrefix("cosmos:container:" + p)

@@ -6,17 +6,20 @@ Resource groups are the top-level container for Azure resources. miniblue implem
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `PUT` | `/subscriptions/{sub}/resourcegroups/{name}` | Create or update |
-| `PATCH` | `/subscriptions/{sub}/resourcegroups/{name}` | Update tags |
-| `GET` | `/subscriptions/{sub}/resourcegroups/{name}` | Get by name |
-| `HEAD` | `/subscriptions/{sub}/resourcegroups/{name}` | Check existence |
-| `DELETE` | `/subscriptions/{sub}/resourcegroups/{name}` | Delete |
-| `GET` | `/subscriptions/{sub}/resourcegroups` | List all |
+| `PUT` | `/subscriptions/{sub}/resourceGroups/{name}` | Create or update |
+| `PATCH` | `/subscriptions/{sub}/resourceGroups/{name}` | Update tags |
+| `GET` | `/subscriptions/{sub}/resourceGroups/{name}` | Get by name |
+| `HEAD` | `/subscriptions/{sub}/resourceGroups/{name}` | Check existence |
+| `DELETE` | `/subscriptions/{sub}/resourceGroups/{name}` | Delete |
+| `GET` | `/subscriptions/{sub}/resourceGroups` | List all |
+
+The lowercase `/resourcegroups` spelling is also accepted for older clients.
+azurerm 5.x uses the camel-case `/resourceGroups` form.
 
 ## Create a resource group
 
 ```bash
-curl -X PUT "http://localhost:4566/subscriptions/sub1/resourcegroups/myRG?api-version=2020-06-01" \
+curl -X PUT "http://localhost:4566/subscriptions/sub1/resourceGroups/myRG?api-version=2020-06-01" \
   -H "Content-Type: application/json" \
   -d '{
     "location": "eastus",
@@ -51,13 +54,13 @@ Response (`201 Created`):
 ## Get a resource group
 
 ```bash
-curl "http://localhost:4566/subscriptions/sub1/resourcegroups/myRG?api-version=2020-06-01"
+curl "http://localhost:4566/subscriptions/sub1/resourceGroups/myRG?api-version=2020-06-01"
 ```
 
 ## Check existence
 
 ```bash
-curl -I "http://localhost:4566/subscriptions/sub1/resourcegroups/myRG?api-version=2020-06-01"
+curl -I "http://localhost:4566/subscriptions/sub1/resourceGroups/myRG?api-version=2020-06-01"
 ```
 
 Returns `204 No Content` if it exists, `404 Not Found` otherwise.
@@ -65,7 +68,7 @@ Returns `204 No Content` if it exists, `404 Not Found` otherwise.
 ## Update tags
 
 ```bash
-curl -X PATCH "http://localhost:4566/subscriptions/sub1/resourcegroups/myRG?api-version=2020-06-01" \
+curl -X PATCH "http://localhost:4566/subscriptions/sub1/resourceGroups/myRG?api-version=2020-06-01" \
   -H "Content-Type: application/json" \
   -d '{
     "tags": {
@@ -77,7 +80,7 @@ curl -X PATCH "http://localhost:4566/subscriptions/sub1/resourcegroups/myRG?api-
 ## List all resource groups
 
 ```bash
-curl "http://localhost:4566/subscriptions/sub1/resourcegroups?api-version=2020-06-01"
+curl "http://localhost:4566/subscriptions/sub1/resourceGroups?api-version=2020-06-01"
 ```
 
 Response:
@@ -101,7 +104,7 @@ Response:
 ## Delete a resource group
 
 ```bash
-curl -X DELETE "http://localhost:4566/subscriptions/sub1/resourcegroups/myRG?api-version=2020-06-01"
+curl -X DELETE "http://localhost:4566/subscriptions/sub1/resourceGroups/myRG?api-version=2020-06-01"
 ```
 
 Returns `202 Accepted` with a `Location` header for async polling. Deleting a resource group also cleans up all resources inside it (VNets, subnets, DNS zones, ACR registries, functions, Event Grid topics).
@@ -109,7 +112,7 @@ Returns `202 Accepted` with a `Location` header for async polling. Deleting a re
 ## List resources in a group
 
 ```bash
-curl "http://localhost:4566/subscriptions/sub1/resourcegroups/myRG/resources?api-version=2020-06-01"
+curl "http://localhost:4566/subscriptions/sub1/resourceGroups/myRG/resources?api-version=2020-06-01"
 ```
 
 !!! info

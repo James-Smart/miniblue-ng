@@ -8,8 +8,15 @@ miniblue emulates Azure Storage Accounts via ARM endpoints with shared key authe
 |--------|------|-------------|
 | `PUT` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}` | Create or update |
 | `GET` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}` | Get |
-| `DELETE` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}` | Delete |
+| `DELETE` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}` | Delete (`204`) |
 | `GET` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts` | List |
+| `GET` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}/accountMigrations/default` | Migration status |
+
+## Migration status
+
+azurerm 5.x reads `accountMigrations/default` after fetching a storage account.
+miniblue returns a completed migration record whose `targetSkuName` matches the
+account SKU, so the read-back succeeds without a real migration.
 
 ## Create a storage account
 

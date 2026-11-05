@@ -26,6 +26,20 @@ curl -X PUT "http://localhost:4566/subscriptions/sub1/resourceGroups/myRG/provid
   }'
 ```
 
+## DNS and FQDN
+
+When `properties.dnsSettings.domainNameLabel` is set, miniblue derives
+`properties.dnsSettings.fqdn` as:
+
+```text
+<domainNameLabel>.<normalized-location>.cloudapp.azure.com
+```
+
+For example, `domainNameLabel = "myapp"` in `East US` returns
+`myapp.eastus.cloudapp.azure.com`. An explicit `fqdn` is preserved, and
+`reverseFqdn` and `domainNameLabelScope` are stored as supplied. The FQDN is
+metadata for provider read-back; miniblue does not serve DNS.
+
 ## Terraform
 
 ```hcl
@@ -35,11 +49,12 @@ resource "azurerm_public_ip" "example" {
   resource_group_name = azurerm_resource_group.example.name
   allocation_method   = "Static"
   sku                 = "Standard"
+  domain_name_label   = "myapp"
 }
 ```
 
 ## Limitations
 
 - IP addresses are mock values in the `20.0.x.x` range
-- DNS settings are stored but not functional
+- FQDN values are derived metadata; no DNS record is created
 - No availability zone support
