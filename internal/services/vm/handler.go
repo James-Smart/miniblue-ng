@@ -52,6 +52,8 @@ func (h *Handler) Register(r chi.Router) {
 			r.Post("/restart", h.RestartVM)
 			r.Post("/runCommand", h.RunCommand)
 			r.Get("/logs", h.GetLogs)
+			r.Get("/instanceView", h.GetInstanceView)
+			r.Get("/vmSizes", h.ListVMSizes)
 			r.Route("/services", func(r chi.Router) {
 				r.Get("/", h.ListServices)
 				r.Route("/{serviceName}", func(r chi.Router) {
@@ -177,10 +179,9 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 			rec["location"] = loc
 		}
 		props := getProps(rec)
-		for _, k := range []string{"hardwareProfile", "storageProfile", "osProfile"} {
-			if v, ok := inProps[k]; ok {
-				props[k] = v
-			}
+		copyPropertyBlocks(props, inProps)
+		if _, ok := props["vmId"]; !ok {
+			props["vmId"] = uuid.NewString()
 		}
 		if _, hasBlock := input["identity"]; hasBlock {
 			if identityBlock == nil {
@@ -194,7 +195,7 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 		appendProvisionEvent(rec, "virtual machine updated")
 		h.store.Set(key, rec)
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(publicView(rec))
+		json.NewEncoder(w).Encode(vmPublicView(rec))
 		return
 	}
 
@@ -240,7 +241,7 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 	h.store.Set(secretKey(secret), map[string]interface{}{"vmKey": key})
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(publicView(rec))
+	json.NewEncoder(w).Encode(vmPublicView(rec))
 }
 
 func (h *Handler) GetVM(w http.ResponseWriter, r *http.Request) {
@@ -255,7 +256,30 @@ func (h *Handler) GetVM(w http.ResponseWriter, r *http.Request) {
 	}
 	h.refreshVM(rec)
 	h.store.Set(vmKey(sub, rg, name), rec)
-	json.NewEncoder(w).Encode(publicView(rec))
+	json.NewEncoder(w).Encode(vmPublicView(rec))
+}
+
+// GetInstanceView returns the instance view for a VM unwrapped, matching the
+// ARM .../instanceView response shape.
+func (h *Handler) GetInstanceView(w http.ResponseWriter, r *http.Request) {
+	sub := chi.URLParam(r, "subscriptionId")
+	rg := chi.URLParam(r, "resourceGroupName")
+	name := chi.URLParam(r, "vmName")
+
+	rec, ok := h.getVM(sub, rg, name)
+	if !ok {
+		azerr.NotFound(w, "Microsoft.Compute/virtualMachines", name)
+		return
+	}
+	h.refreshVM(rec)
+	h.store.Set(vmKey(sub, rg, name), rec)
+	json.NewEncoder(w).Encode(instanceViewFor(rec))
+}
+
+// ListVMSizes returns the static catalogue of VM sizes the provider may choose
+// from. miniblue does not enforce sizes, so a broad superset is returned.
+func (h *Handler) ListVMSizes(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(map[string]interface{}{"value": vmSizesCatalog()})
 }
 
 func (h *Handler) listVMs(w http.ResponseWriter, prefix string) {
@@ -267,7 +291,7 @@ func (h *Handler) listVMs(w http.ResponseWriter, prefix string) {
 			continue
 		}
 		h.refreshVM(rec)
-		value = append(value, publicView(rec))
+		value = append(value, vmPublicView(rec))
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"value": value})
 }
@@ -378,7 +402,7 @@ func (h *Handler) powerAction(w http.ResponseWriter, r *http.Request, action str
 	h.refreshVM(rec)
 	appendProvisionEvent(rec, "power action %s completed (state %s)", action, powerState(rec))
 	h.store.Set(vmKey(sub, rg, name), rec)
-	json.NewEncoder(w).Encode(publicView(rec))
+	json.NewEncoder(w).Encode(vmPublicView(rec))
 }
 
 func (h *Handler) StartVM(w http.ResponseWriter, r *http.Request) {
