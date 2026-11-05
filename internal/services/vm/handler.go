@@ -217,6 +217,18 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 	rec["_networkName"] = vmNetworkName(rg, name)
 	appendProvisionEvent(rec, "virtual machine created (image %s)", image)
 
+	if err := h.ensureOSDisk(rec); err != nil {
+		var missing *diskNotFoundError
+		if errors.As(err, &missing) {
+			azerr.WriteError(w, http.StatusNotFound, "DiskNotFound", missing.Error())
+			return
+		}
+		azerr.WriteError(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	getProps(rec)["instanceView"] = instanceViewFor(rec)
+	appendProvisionEvent(rec, "OS disk %s attached", osDiskName(rec))
+
 	if h.dockerAvail {
 		network := vmNetworkName(rg, name)
 		containerName := vmContainerName(rg, name)
@@ -341,6 +353,7 @@ func (h *Handler) DeleteVM(w http.ResponseWriter, r *http.Request) {
 	if secret, _ := rec["_identitySecret"].(string); secret != "" {
 		h.store.Delete(secretKey(secret))
 	}
+	h.detachVMDisks(rec)
 	h.store.Delete(vmKey(sub, rg, name))
 
 	w.WriteHeader(http.StatusNoContent)

@@ -229,6 +229,65 @@ func copyPropertyBlocks(dst, src map[string]interface{}) {
 	}
 }
 
+// applyOSDisk fills storageProfile.osDisk with the effective OS disk fields,
+// preferring values supplied by the caller and falling back to the disk record.
+// The provider reads name, diskSizeGB, storageAccountType and the managed-disk
+// ID, so all of them must be present on every VM response.
+func applyOSDisk(rec, diskRec map[string]interface{}) {
+	osDisk := vmOSDisk(rec)
+	diskProps, _ := diskRec["properties"].(map[string]interface{})
+	diskSKU, _ := diskRec["sku"].(map[string]interface{})
+	creationData, _ := diskProps["creationData"].(map[string]interface{})
+
+	if name := asString(osDisk["name"]); name == "" {
+		osDisk["name"] = asString(diskRec["name"])
+	}
+
+	managedDisk, _ := osDisk["managedDisk"].(map[string]interface{})
+	if managedDisk == nil {
+		managedDisk = map[string]interface{}{}
+	}
+	if id := asString(managedDisk["id"]); id == "" {
+		managedDisk["id"] = asString(diskRec["id"])
+	}
+	if sku := asString(managedDisk["storageAccountType"]); sku == "" {
+		if sku = asString(osDisk["storageAccountType"]); sku == "" {
+			if sku = asString(diskSKU["name"]); sku == "" {
+				sku = "Standard_LRS"
+			}
+		}
+		managedDisk["storageAccountType"] = sku
+	}
+	osDisk["managedDisk"] = managedDisk
+
+	if size, ok := asNumber(osDisk["diskSizeGB"]); !ok || size <= 0 {
+		if size, ok = asNumber(diskProps["diskSizeGB"]); !ok || size <= 0 {
+			size = 30
+		}
+		osDisk["diskSizeGB"] = size
+	}
+
+	if osType := asString(osDisk["osType"]); osType == "" {
+		osType = asString(diskProps["osType"])
+		if osType == "" {
+			osType = "Linux"
+		}
+		osDisk["osType"] = osType
+	}
+
+	if option := asString(osDisk["createOption"]); option == "" {
+		option = asString(creationData["createOption"])
+		if option == "" {
+			option = "FromImage"
+		}
+		osDisk["createOption"] = option
+	}
+
+	if caching := asString(osDisk["caching"]); caching == "" {
+		osDisk["caching"] = "ReadWrite"
+	}
+}
+
 // vmSizesCatalog is a broad superset of common Azure VM sizes. The provider
 // only uses this endpoint to decide whether it must deallocate before a
 // resize, so returning more sizes than miniblue can actually run is fine.
