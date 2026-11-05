@@ -214,6 +214,67 @@ func instanceViewFor(rec map[string]interface{}) map[string]interface{} {
 	return iv
 }
 
+// cloneValue deep-copies maps and slices so merges never alias stored records.
+func cloneValue(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		return cloneMap(t)
+	case []interface{}:
+		out := make([]interface{}, len(t))
+		for i, item := range t {
+			out[i] = cloneValue(item)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+func cloneMap(m map[string]interface{}) map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		out[k] = cloneValue(v)
+	}
+	return out
+}
+
+// mergeMaps recursively merges patch into dst. Maps merge, arrays and scalars
+// replace, and a JSON null removes the key. The inputs are never mutated, so a
+// failed update cannot corrupt the stored record.
+func mergeMaps(dst, patch map[string]interface{}) map[string]interface{} {
+	out := cloneMap(dst)
+	if out == nil {
+		out = map[string]interface{}{}
+	}
+	for k, v := range patch {
+		if v == nil {
+			delete(out, k)
+			continue
+		}
+		if pm, ok := v.(map[string]interface{}); ok {
+			dm, _ := out[k].(map[string]interface{})
+			out[k] = mergeMaps(dm, pm)
+			continue
+		}
+		out[k] = cloneValue(v)
+	}
+	return out
+}
+
+// replaceRecord overwrites dst in place with the contents of src, preserving
+// the map identity the store and in-flight handlers hold.
+func replaceRecord(dst, src map[string]interface{}) {
+	for k := range dst {
+		delete(dst, k)
+	}
+	for k, v := range src {
+		dst[k] = v
+	}
+}
+
 // copyPropertyBlocks copies pass-through property blocks from a request onto a
 // stored VM, skipping fields miniblue generates itself and write-only secrets.
 func copyPropertyBlocks(dst, src map[string]interface{}) {

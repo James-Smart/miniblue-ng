@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -46,6 +45,7 @@ func (h *Handler) Register(r chi.Router) {
 		r.Get("/", h.ListVMs)
 		r.Route("/{vmName}", func(r chi.Router) {
 			r.Put("/", h.CreateOrUpdateVM)
+			r.Patch("/", h.PatchVM)
 			r.Get("/", h.GetVM)
 			r.Delete("/", h.DeleteVM)
 			r.Post("/start", h.StartVM)
@@ -174,37 +174,15 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 
 	if exists {
 		// Azure PUT semantics: update in place. The backing container is not
-		// re-imaged; metadata and identity assignments are refreshed.
-		rec := existing
-		if loc, ok := input["location"].(string); ok && loc != "" {
-			rec["location"] = loc
+		// re-imaged; the same merge path as PATCH refreshes metadata and
+		// identity assignments.
+		if err := h.updateVM(existing, input); err != nil {
+			h.writeUpdateError(w, err)
+			return
 		}
-		for _, k := range []string{"tags", "zones", "plan", "extendedLocation"} {
-			if v, ok := input[k]; ok {
-				rec[k] = v
-			}
-		}
-		if _, ok := rec["_createdAt"]; !ok {
-			rec["_createdAt"] = time.Now().UTC().Format(time.RFC3339)
-		}
-		props := getProps(rec)
-		copyPropertyBlocks(props, inProps)
-		if _, ok := props["vmId"]; !ok {
-			props["vmId"] = uuid.NewString()
-		}
-		if _, hasBlock := input["identity"]; hasBlock {
-			if identityBlock == nil {
-				delete(rec, "identity")
-			} else {
-				rec["identity"] = identityBlock
-			}
-			appendProvisionEvent(rec, "identity assignments updated")
-		}
-		h.refreshVM(rec)
-		appendProvisionEvent(rec, "virtual machine updated")
-		h.store.Set(key, rec)
+		h.store.Set(key, existing)
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(vmPublicView(rec))
+		json.NewEncoder(w).Encode(vmPublicView(existing))
 		return
 	}
 
@@ -268,6 +246,139 @@ func (h *Handler) CreateOrUpdateVM(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(vmPublicView(rec))
+}
+
+// PatchVM applies a partial update to an existing VM. Unlike PUT it never
+// creates a resource, so a missing VM returns 404.
+func (h *Handler) PatchVM(w http.ResponseWriter, r *http.Request) {
+	sub := chi.URLParam(r, "subscriptionId")
+	rg := chi.URLParam(r, "resourceGroupName")
+	name := chi.URLParam(r, "vmName")
+
+	rec, ok := h.getVM(sub, rg, name)
+	if !ok {
+		azerr.NotFound(w, "Microsoft.Compute/virtualMachines", name)
+		return
+	}
+
+	input, err := decodeBody(r)
+	if err != nil {
+		azerr.BadRequest(w, "Could not parse request body: "+err.Error())
+		return
+	}
+
+	if err := h.updateVM(rec, input); err != nil {
+		h.writeUpdateError(w, err)
+		return
+	}
+	h.store.Set(vmKey(sub, rg, name), rec)
+	json.NewEncoder(w).Encode(vmPublicView(rec))
+}
+
+// updateVM applies an update request to a stored VM record using merge
+// semantics: maps merge recursively, arrays and scalars replace, and JSON null
+// removes a key. Generated/internal fields are never taken from the request.
+// Identity and OS-disk references are validated before the record is mutated,
+// so a rejected update leaves the VM and its disks untouched.
+func (h *Handler) updateVM(rec, input map[string]interface{}) error {
+	vmID := ""
+	if props, _ := rec["properties"].(map[string]interface{}); props != nil {
+		vmID = asString(props["vmId"])
+	}
+
+	identityPresent := false
+	var identityBlock map[string]interface{}
+	if raw, has := input["identity"]; has {
+		identityPresent = true
+		if raw != nil {
+			block, err := resolveIdentityBlock(h.store, input)
+			if err != nil {
+				return err
+			}
+			identityBlock = block
+		}
+	}
+
+	patch := map[string]interface{}{}
+	for _, k := range []string{"location", "tags", "zones", "plan", "extendedLocation"} {
+		if v, ok := input[k]; ok {
+			patch[k] = v
+		}
+	}
+	var propsPatch map[string]interface{}
+	if inProps, ok := input["properties"].(map[string]interface{}); ok {
+		propsPatch = cloneMap(inProps)
+		for _, k := range []string{"miniblue", "provisioningState", "vmId", "instanceView"} {
+			delete(propsPatch, k)
+		}
+		if osProfile, ok := propsPatch["osProfile"].(map[string]interface{}); ok {
+			delete(osProfile, "adminPassword")
+		}
+		patch["properties"] = propsPatch
+	}
+
+	oldDiskID := osDiskManagedDiskID(rec)
+	oldDiskName := osDiskName(rec)
+	newDiskID, explicitDisk := osDiskIDFromPatch(propsPatch)
+	if !explicitDisk {
+		newDiskID = oldDiskID
+	}
+	switchDisk := newDiskID != "" && newDiskID != oldDiskID
+	if switchDisk {
+		if err := h.validateOSDiskForVM(newDiskID, vmID); err != nil {
+			return err
+		}
+	}
+
+	merged := mergeMaps(rec, patch)
+	replaceRecord(rec, merged)
+	props := getProps(rec)
+	if asString(props["vmId"]) == "" {
+		props["vmId"] = uuid.NewString()
+	}
+
+	if identityPresent {
+		if identityBlock == nil {
+			delete(rec, "identity")
+		} else {
+			rec["identity"] = identityBlock
+		}
+		appendProvisionEvent(rec, "identity assignments updated")
+	}
+
+	if switchDisk {
+		h.detachOSDiskByID(oldDiskID, vmID)
+		resetOSDiskForReplacement(rec)
+		if err := h.ensureOSDisk(rec); err != nil {
+			return err
+		}
+		if _, has := rec["_osDiskName"]; has {
+			rec["_osDiskName"] = osDiskName(rec)
+		}
+		appendProvisionEvent(rec, "OS disk %s attached", osDiskName(rec))
+	} else if oldDiskID != "" && osDiskManagedDiskID(rec) != oldDiskID {
+		// An explicit null must not orphan or regenerate the existing disk.
+		restoreOSDiskReference(rec, oldDiskID, oldDiskName)
+	}
+
+	h.refreshVM(rec)
+	appendProvisionEvent(rec, "virtual machine updated")
+	return nil
+}
+
+// writeUpdateError maps update failures onto ARM error responses.
+func (h *Handler) writeUpdateError(w http.ResponseWriter, err error) {
+	var missing *diskNotFoundError
+	if errors.As(err, &missing) {
+		azerr.WriteError(w, http.StatusNotFound, "DiskNotFound", missing.Error())
+		return
+	}
+	var inUse *diskInUseError
+	if errors.As(err, &inUse) {
+		azerr.WriteError(w, http.StatusConflict, "DiskInUse", inUse.Error())
+		return
+	}
+	azerr.BadRequest(w, err.Error())
 }
 
 func (h *Handler) GetVM(w http.ResponseWriter, r *http.Request) {

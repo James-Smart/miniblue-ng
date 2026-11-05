@@ -151,6 +151,128 @@ func (h *Handler) detachVMDisks(rec map[string]interface{}) {
 	}
 }
 
+// osDiskManagedDiskID returns the managed disk ID referenced by the VM's OS
+// disk, or "" when the VM has no managed OS disk.
+func osDiskManagedDiskID(rec map[string]interface{}) string {
+	props, _ := rec["properties"].(map[string]interface{})
+	if props == nil {
+		return ""
+	}
+	storage, _ := props["storageProfile"].(map[string]interface{})
+	if storage == nil {
+		return ""
+	}
+	osDisk, _ := storage["osDisk"].(map[string]interface{})
+	if osDisk == nil {
+		return ""
+	}
+	md, _ := osDisk["managedDisk"].(map[string]interface{})
+	return asString(md["id"])
+}
+
+// osDiskIDFromPatch extracts the managed disk ID an update request explicitly
+// sets on storageProfile.osDisk. The second return value reports whether the
+// patch mentions the managed disk at all; an explicit JSON null is reported as
+// an empty ID with true so the caller can distinguish it from an omitted block.
+func osDiskIDFromPatch(props map[string]interface{}) (string, bool) {
+	if props == nil {
+		return "", false
+	}
+	storage, _ := props["storageProfile"].(map[string]interface{})
+	if storage == nil {
+		return "", false
+	}
+	osDisk, _ := storage["osDisk"].(map[string]interface{})
+	if osDisk == nil {
+		return "", false
+	}
+	md, has := osDisk["managedDisk"]
+	if !has {
+		return "", false
+	}
+	if md == nil {
+		return "", true
+	}
+	m, ok := md.(map[string]interface{})
+	if !ok {
+		return "", true
+	}
+	id, has := m["id"]
+	if !has {
+		return "", false
+	}
+	s, _ := id.(string)
+	return s, true
+}
+
+// validateOSDiskForVM checks that an explicit OS disk exists and is not owned by
+// another VM. It never mutates either record.
+func (h *Handler) validateOSDiskForVM(id, vmID string) error {
+	sub, rg, name, ok := disks.ParseID(id)
+	if !ok {
+		return &diskNotFoundError{id: id}
+	}
+	diskRec, found := disks.Get(h.store, sub, rg, name)
+	if !found {
+		return &diskNotFoundError{id: id}
+	}
+	diskProps, _ := diskRec["properties"].(map[string]interface{})
+	if managedBy := asString(diskProps["managedBy"]); managedBy != "" && managedBy != vmID {
+		return &diskInUseError{id: id, managedBy: managedBy}
+	}
+	return nil
+}
+
+// detachOSDiskByID detaches a disk from the VM, unless it belongs to another
+// VM (in which case it is left alone).
+func (h *Handler) detachOSDiskByID(id, vmID string) {
+	if id == "" {
+		return
+	}
+	sub, rg, name, ok := disks.ParseID(id)
+	if !ok {
+		return
+	}
+	diskRec, found := disks.Get(h.store, sub, rg, name)
+	if !found {
+		return
+	}
+	diskProps, _ := diskRec["properties"].(map[string]interface{})
+	if managedBy := asString(diskProps["managedBy"]); managedBy != "" && managedBy != vmID {
+		return
+	}
+	disks.Detach(h.store, sub, rg, name)
+}
+
+// resetOSDiskForReplacement drops fields derived from the previous OS disk so
+// applyOSDisk refills them from the newly attached disk. Caller-supplied
+// caching/createOption and the new managed-disk ID are kept.
+func resetOSDiskForReplacement(rec map[string]interface{}) {
+	osDisk := vmOSDisk(rec)
+	delete(osDisk, "name")
+	delete(osDisk, "diskSizeGB")
+	delete(osDisk, "osType")
+	if md, ok := osDisk["managedDisk"].(map[string]interface{}); ok {
+		delete(md, "storageAccountType")
+	}
+}
+
+// restoreOSDiskReference puts the previous OS disk reference back after an
+// update removed it with an explicit null. An empty managed-disk ID means
+// "keep the existing disk", never "generate a new one".
+func restoreOSDiskReference(rec map[string]interface{}, id, name string) {
+	osDisk := vmOSDisk(rec)
+	md, _ := osDisk["managedDisk"].(map[string]interface{})
+	if md == nil {
+		md = map[string]interface{}{}
+		osDisk["managedDisk"] = md
+	}
+	md["id"] = id
+	if name != "" {
+		osDisk["name"] = name
+	}
+}
+
 // vmStorageProfile returns the VM's storageProfile block, creating it when the
 // request did not supply one.
 func vmStorageProfile(rec map[string]interface{}) map[string]interface{} {
