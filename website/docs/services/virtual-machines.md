@@ -132,7 +132,7 @@ Every VM `GET` and `PUT`/`PATCH` response includes:
 }
 ```
 
-The status list reflects the live power state (`PowerState/running`, `PowerState/stopped` or `PowerState/deallocated`) and is recomputed on every read, so it cannot go stale after a power action. `?$expand=instanceView` is accepted; the instance view is always included either way.
+The status list reflects the live power state (`PowerState/running` or `PowerState/stopped`; `deallocate` records `stopped`, not `deallocated`) and is recomputed on every read, so it cannot go stale after a power action. `?$expand=instanceView` is accepted; the instance view is always included either way.
 
 `GET .../vmSizes` returns `{"value": [...]}` with a broad catalogue of common sizes (`Standard_B1s`, `Standard_B2s`, `Standard_D2s_v3`, `Standard_DS1_v2`, ...). miniblue does not enforce sizes — the endpoint exists so the provider can decide whether it must deallocate before a resize.
 
@@ -201,8 +201,11 @@ Without Docker there is no runtime to control, but power actions are still meani
 | Operation | Without Docker |
 |-----------|----------------|
 | `start`, `restart`, `powerOff`, `deallocate` | `200`, metadata updated |
-| Service list/delete | `200`, metadata-only |
-| `runCommand`, logs, service deploy, SSH | `409 DockerUnavailable` |
+| Service list | `200`, metadata-only |
+| Service delete | `204`, metadata-only |
+| `runCommand`, logs, service deploy | `409 DockerUnavailable` |
+
+`azlocal vm ssh` is not an API call: it runs `docker exec -it` from the CLI host, so it needs the Docker CLI and a running VM container there rather than returning `409 DockerUnavailable`.
 
 ## Custom data
 
@@ -341,13 +344,13 @@ Tokens carry `xms_mirid` and VM claims and are verifiable via `POST /metadata/id
 
 ## Enabling only what you need
 
-The VM feature is split across four filterable services: `vm` (VMs and extensions), `network` (VNets, subnets and NICs), `disks` (managed disks) and `sshkeys` (SSH public keys). When `SERVICES` is set, enable all of them or the VM calls will fail on missing dependencies:
+The VM feature is split across four filterable services: `vm` (VMs and extensions), `network` (VNets, subnets and NICs), `disks` (managed disks) and `sshkeys` (SSH public keys). Enable the services for the resources you actually use — a VM that references a NIC, public IP, NSG or disk needs the matching service registered too. The bundled Terraform fixture, for example, needs:
 
 ```bash
-SERVICES=vm,network,disks,sshkeys ./bin/miniblue
+SERVICES=resourcegroups,vm,network,disks,sshkeys,publicip,nsg ./bin/miniblue
 ```
 
-Add `resourcegroups` to that list if you create resource groups through the API rather than using pre-seeded state. The managed-identity services (`identity`, plus the always-registered metadata/auth endpoints) are only needed if you use identity assignment.
+`resourcegroups` is only needed when resource groups are created through the API rather than pre-seeded; the fixture creates one, so it is included above. The managed-identity services (`identity`, plus the always-registered metadata/auth endpoints) are only needed if you use identity assignment.
 
 ## Terraform
 
@@ -380,5 +383,5 @@ azlocal identity create|list|show|delete
 - The keep-alive container runs `sleep`. VM extensions are metadata-only; they are never executed. Custom data runs as a shell script only once, on create.
 - SSH public keys are registered as resources and echoed on the VM profile, but are not installed into the container.
 - VM sizes are not enforced; `vmSizes` is a static superset used by the provider for resize pre-checks.
-- Without Docker, lifecycle metadata works but `runCommand`, logs, service deploy and SSH return `409 DockerUnavailable`. Power actions still succeed.
+- Without Docker, lifecycle metadata works but `runCommand`, logs and service deploy return `409 DockerUnavailable`. Power actions still succeed. `azlocal vm ssh` fails locally because it needs the Docker CLI on the CLI host.
 - Container and network names are derived from the resource group and VM name, so those must be valid Docker identifiers.

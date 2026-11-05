@@ -6,7 +6,10 @@ miniblue emulates 32 Azure services on a single port. All services use in-memory
 
 | Service | Azure Provider | Status | ARM API | Data Plane |
 |---------|---------------|--------|---------|------------|
+| Subscriptions | `Microsoft.Resources` | Done | Yes | -- |
+| Tenants | `Microsoft.Resources` | Done | Yes | -- |
 | [Resource Groups](resource-groups.md) | `Microsoft.Resources` | Done | Yes | -- |
+| Deployments | `Microsoft.Resources` | Done | Yes | -- |
 | [Blob Storage](blob-storage.md) | `Microsoft.Storage` | Done | -- | Yes |
 | Table Storage | `Microsoft.Storage` | Done | -- | Yes |
 | Queue Storage | `Microsoft.Storage` | Done | -- | Yes |
@@ -14,8 +17,8 @@ miniblue emulates 32 Azure services on a single port. All services use in-memory
 | [Cosmos DB](cosmos-db.md) | `Microsoft.DocumentDB` | Done | -- | Yes |
 | [Service Bus](service-bus.md) | `Microsoft.ServiceBus` | Done | -- | Yes |
 | Azure Functions | `Microsoft.Web` | Done | Yes | -- |
+| Container Apps | `Microsoft.App` | Done | Yes | -- |
 | [Virtual Networks](virtual-networks.md) | `Microsoft.Network` | Done | Yes | -- |
-| Network Interfaces | `Microsoft.Network` | Done | Yes | -- |
 | [DNS Zones](dns-zones.md) | `Microsoft.Network` | Done | Yes | -- |
 | [Container Registry](container-registry.md) | `Microsoft.ContainerRegistry` | Done | Yes | Yes |
 | Event Grid | `Microsoft.EventGrid` | Done | Yes | Yes |

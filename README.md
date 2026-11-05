@@ -47,10 +47,11 @@ No Azure account or credentials needed.
 
 | Service | Service | Service |
 |---------|---------|---------|
-| Resource Groups | Blob Storage | Table Storage |
-| Queue Storage | Key Vault | Cosmos DB |
-| Service Bus | Azure Functions | Virtual Networks |
-| Network Interfaces | DNS Zones | Container Registry |
+| Subscriptions | Tenants | Resource Groups |
+| Blob Storage | Table Storage | Queue Storage |
+| Key Vault | Cosmos DB | Service Bus |
+| Azure Functions | Container Apps | Deployments |
+| Virtual Networks | DNS Zones | Container Registry |
 | Event Grid | App Configuration | Managed Identity |
 | DB for PostgreSQL | DB for MySQL | Azure SQL Database |
 | Azure Cache for Redis | Container Instances | Kubernetes Service (AKS) |
