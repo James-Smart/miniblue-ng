@@ -40,6 +40,28 @@ func (h *Handler) Register(r chi.Router) {
 					r.Delete("/", endpoints.delete)
 				})
 			})
+
+			r.Route("/originGroups", func(r chi.Router) {
+				groups := &nested{store: h.store, spec: originGroupSpec}
+				r.Get("/", groups.list)
+				r.Route("/{originGroupName}", func(r chi.Router) {
+					r.Put("/", groups.create)
+					r.Get("/", groups.get)
+					r.Patch("/", groups.patch)
+					r.Delete("/", groups.delete)
+
+					r.Route("/origins", func(r chi.Router) {
+						origins := &nested{store: h.store, spec: originSpec}
+						r.Get("/", origins.list)
+						r.Route("/{originName}", func(r chi.Router) {
+							r.Put("/", origins.create)
+							r.Get("/", origins.get)
+							r.Patch("/", origins.patch)
+							r.Delete("/", origins.delete)
+						})
+					})
+				})
+			})
 		})
 	})
 	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.Cdn/profiles", h.ListInSubscription)

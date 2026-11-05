@@ -7,8 +7,10 @@ import (
 )
 
 const (
-	profileType  = "Microsoft.Cdn/profiles"
-	endpointType = "Microsoft.Cdn/profiles/afdEndpoints"
+	profileType     = "Microsoft.Cdn/profiles"
+	endpointType    = "Microsoft.Cdn/profiles/afdEndpoints"
+	originGroupType = "Microsoft.Cdn/profiles/originGroups"
+	originType      = "Microsoft.Cdn/profiles/originGroups/origins"
 )
 
 // profileResponse builds the full profile response. It merges input over the
@@ -85,4 +87,90 @@ func endpointResponse(parent, input, existing map[string]interface{}) map[string
 func generatedEndpointHostName(name string) string {
 	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:6]
 	return strings.ToLower(name) + "-" + suffix + ".z01.azurefd.net"
+}
+
+// originGroupResponse builds an origin group response. Health probe and load
+// balancing settings are echoed, with the provider's defaults filled in for
+// any omitted field.
+func originGroupResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	health := cloneMap(mapVal(props["healthProbeSettings"]))
+	if health == nil {
+		health = map[string]interface{}{}
+	}
+	defaultNumber(health, "probeIntervalInSeconds", 30)
+	defaultString(health, "probePath", "/")
+	defaultString(health, "probeRequestType", "HEAD")
+	defaultString(health, "probeProtocol", "Http")
+	props["healthProbeSettings"] = health
+
+	loadBalancing := cloneMap(mapVal(props["loadBalancingSettings"]))
+	if loadBalancing == nil {
+		loadBalancing = map[string]interface{}{}
+	}
+	defaultNumber(loadBalancing, "sampleSize", 4)
+	defaultNumber(loadBalancing, "successfulSamplesRequired", 3)
+	defaultNumber(loadBalancing, "additionalLatencyInMilliseconds", 0)
+	props["loadBalancingSettings"] = loadBalancing
+
+	if stringVal(props["sessionAffinityState"]) == "" {
+		props["sessionAffinityState"] = "Disabled"
+	}
+	if _, ok := props["trafficRestorationTimeToHealedOrNewEndpointsInMinutes"]; !ok {
+		props["trafficRestorationTimeToHealedOrNewEndpointsInMinutes"] = float64(10)
+	}
+	rec["properties"] = props
+
+	return rec
+}
+
+// originResponse builds an origin response. It records the parent origin group
+// and fills in the defaults the provider expects for omitted fields.
+func originResponse(parent, input, existing map[string]interface{}) map[string]interface{} {
+	rec := mergeMaps(existing, input)
+
+	props := cloneMap(mapVal(rec["properties"]))
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+
+	props["originGroupName"] = stringVal(parent["name"])
+
+	if stringVal(props["originHostHeader"]) == "" {
+		props["originHostHeader"] = stringVal(props["hostName"])
+	}
+	defaultNumber(props, "httpPort", 80)
+	defaultNumber(props, "httpsPort", 443)
+	defaultNumber(props, "priority", 1)
+	defaultNumber(props, "weight", 1000)
+	if stringVal(props["enabledState"]) == "" {
+		props["enabledState"] = "Enabled"
+	}
+	if _, ok := props["enforceCertificateNameCheck"]; !ok {
+		props["enforceCertificateNameCheck"] = true
+	}
+	rec["properties"] = props
+
+	return rec
+}
+
+// defaultNumber sets key to value when the map does not already hold it.
+func defaultNumber(m map[string]interface{}, key string, value float64) {
+	if _, ok := m[key]; !ok {
+		m[key] = value
+	}
+}
+
+// defaultString sets key to value when the map does not already hold a
+// non-empty value.
+func defaultString(m map[string]interface{}, key, value string) {
+	if stringVal(m[key]) == "" {
+		m[key] = value
+	}
 }

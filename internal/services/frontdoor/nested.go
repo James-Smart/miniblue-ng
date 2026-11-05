@@ -284,3 +284,24 @@ var endpointSpec = resourceSpec{
 	computed: endpointResponse,
 	children: []string{"route"},
 }
+
+// originGroupSpec is the origin group child of a profile.
+var originGroupSpec = resourceSpec{
+	kind:     "originGroup",
+	keyKind:  "origingroup",
+	segment:  "originGroups",
+	armType:  originGroupType,
+	parents:  []string{"profileName"},
+	computed: originGroupResponse,
+	children: []string{"origin"},
+}
+
+// originSpec is the origin child of an origin group.
+var originSpec = resourceSpec{
+	kind:     "origin",
+	keyKind:  "origin",
+	segment:  "origins",
+	armType:  originType,
+	parents:  []string{"profileName", "originGroupName"},
+	computed: originResponse,
+}
