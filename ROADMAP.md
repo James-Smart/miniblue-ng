@@ -22,7 +22,6 @@ Priorities shift based on community feedback. Open an issue or discussion if som
 | Management Groups | `Microsoft.Management` | Medium | Hierarchy, subscription assignment |
 | Azure Monitor | `Microsoft.Insights` | Medium | Metrics and diagnostic settings |
 | Traffic Manager | `Microsoft.Network` | Medium | DNS-based routing profiles |
-| Azure Front Door | `Microsoft.Cdn` | Medium | CDN and WAF policies |
 | Private DNS Zones | `Microsoft.Network` | Medium | Extends existing DNS service |
 | Azure Policy | `Microsoft.Authorization` | Medium | Policy definitions, assignments and evaluation on deployments |
 

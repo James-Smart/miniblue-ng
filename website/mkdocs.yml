@@ -68,6 +68,7 @@ nav:
     - Network Security Groups: services/network-security-groups.md
     - Load Balancer: services/load-balancer.md
     - Application Gateway: services/application-gateway.md
+    - Front Door: services/front-door.md
     - DNS Zones: services/dns-zones.md
     - Container Registry: services/container-registry.md
     - Container Instances: services/container-instances.md

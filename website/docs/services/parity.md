@@ -35,6 +35,8 @@ What's implemented, stubbed, and unsupported in miniblue compared to real Azure 
 | Network Security Groups | Full | Full | Full | Full | - | Security rules, default rules, cascade delete |
 | Load Balancer | Full | Full | Full | Full | - | Frontends, backends, rules, probes, NAT |
 | Application Gateway | Full | Full | Full | Full | - | SKU, frontends, backends, listeners, rules, probes, WAF |
+| Front Door | Full | Full | Full | Full | Full (PATCH) | Profile tree: endpoints/routes, origin groups/origins, rule sets/rules, custom domains, secrets and security policies; metadata only |
+| Front Door WAF Policy | Full | Full | Full | Full | Full (PATCH) | Resource-group scoped `Microsoft.Network` policy; no request inspection |
 | Storage Accounts | Full | Full | Full | Full | - | Shared key auth, blob/queue/table/file endpoints |
 | Subscriptions | Full | Full | - | - | - | Mock subscription |
 | Tenants | - | - | Full | - | - | Mock tenant |
@@ -63,7 +65,7 @@ What's implemented, stubbed, and unsupported in miniblue compared to real Azure 
 | Instance discovery | Full | Authority validation (internal) |
 | Managed Identity (IMDS) | Full | Token endpoint for workload identity |
 | Cloud metadata | Full | Terraform provider metadata |
-| /health | Full | 32 services listed |
+| /health | Full | 33 services listed |
 | /metrics | Full | Uptime, request count, error rate |
 
 ## Not Implemented

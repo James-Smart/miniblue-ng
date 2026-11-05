@@ -1,6 +1,6 @@
 # Services Overview
 
-miniblue emulates 32 Azure services on a single port. All services use in-memory storage and require no authentication.
+miniblue emulates 33 Azure services on a single port. All services use in-memory storage and require no authentication.
 
 ## Service status
 
@@ -37,6 +37,7 @@ miniblue emulates 32 Azure services on a single port. All services use in-memory
 | Network Security Groups | `Microsoft.Network` | Done | Yes | -- |
 | Load Balancer | `Microsoft.Network` | Done | Yes | -- |
 | Application Gateway | `Microsoft.Network` | Done | Yes | -- |
+| [Front Door](front-door.md) | `Microsoft.Cdn` | Done | Yes | -- |
 | Storage Accounts | `Microsoft.Storage` | Done | Yes | -- |
 
 ### What "ARM API" and "Data Plane" mean
@@ -63,6 +64,8 @@ The following resources work with `hashicorp/azurerm` provider v3.x:
 | `azurerm_lb_probe` | Load Balancer |
 | `azurerm_lb_rule` | Load Balancer |
 | `azurerm_application_gateway` | Application Gateway |
+| `azurerm_cdn_frontdoor_profile` | Front Door |
+| `azurerm_cdn_frontdoor_firewall_policy` | Front Door |
 | `azurerm_storage_account` | Storage Accounts |
 | `azurerm_kubernetes_cluster` | Kubernetes Service (AKS) |
 
