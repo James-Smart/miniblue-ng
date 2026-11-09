@@ -35,6 +35,10 @@ GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults
 DELETE /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{vault}/providers/Microsoft.Insights/diagnosticSettings/{name}
 ```
 
+Diagnostic settings `PUT` always returns `200`, for both create and update, as
+real Azure does; the diagnosticsettings SDK does not accept `201`. Other
+platform resources return `201` on create and `200` on update.
+
 ### Log Analytics compatibility
 
 `azurerm_log_analytics_workspace` checks for soft-deleted workspaces before

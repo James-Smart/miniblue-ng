@@ -234,15 +234,10 @@ func (h *Handler) createOrUpdateDiagnosticSetting(w http.ResponseWriter, r *http
 	id := parentID + diagnosticSettingsMarker + "/" + name
 	record := resourceResponse(body, id, name, diagnosticSettingsType)
 
-	key := h.diagnosticSettingKey(parentID, name)
-	_, exists := h.store.Get(key)
-	h.store.Set(key, record)
-
-	if exists {
-		w.WriteHeader(http.StatusOK)
-	} else {
-		w.WriteHeader(http.StatusCreated)
-	}
+	// The diagnosticsettings SDK only accepts 200 for create or update; real
+	// Azure returns 200 for both, never 201.
+	h.store.Set(h.diagnosticSettingKey(parentID, name), record)
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(record)
 }
 

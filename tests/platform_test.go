@@ -164,7 +164,7 @@ func TestDiagnosticSettingsLifecycle(t *testing.T) {
 	url := ts.URL + setting
 
 	resp := doRequest(t, "PUT", url, `{"properties":{"workspaceId":"ws1","logs":[]}}`)
-	expectStatus(t, resp, 201)
+	expectStatus(t, resp, 200)
 	created := decodeJSON(t, resp)
 	resp.Body.Close()
 
@@ -185,12 +185,25 @@ func TestDiagnosticSettingsLifecycle(t *testing.T) {
 		t.Errorf("expected workspaceId=ws1, got %v", props["workspaceId"])
 	}
 
+	updateResp := doRequest(t, "PUT", url, `{"properties":{"workspaceId":"ws2","logs":[{"category":"Audit","enabled":true}]}}`)
+	expectStatus(t, updateResp, 200)
+	updated := decodeJSON(t, updateResp)
+	updateResp.Body.Close()
+	updatedProps, _ := updated["properties"].(map[string]interface{})
+	if updatedProps["workspaceId"] != "ws2" {
+		t.Errorf("expected updated workspaceId=ws2, got %v", updatedProps["workspaceId"])
+	}
+
 	getResp := doRequest(t, "GET", url, "")
 	expectStatus(t, getResp, 200)
 	got := decodeJSON(t, getResp)
 	getResp.Body.Close()
 	if got["id"] != setting {
 		t.Errorf("GET expected id=%s, got %v", setting, got["id"])
+	}
+	gotProps, _ := got["properties"].(map[string]interface{})
+	if gotProps["workspaceId"] != "ws2" {
+		t.Errorf("GET expected workspaceId=ws2, got %v", gotProps["workspaceId"])
 	}
 
 	listResp := doRequest(t, "GET", ts.URL+parent+"/providers/Microsoft.Insights/diagnosticSettings", "")
@@ -209,4 +222,8 @@ func TestDiagnosticSettingsLifecycle(t *testing.T) {
 	missingResp := doRequest(t, "GET", url, "")
 	expectStatus(t, missingResp, 404)
 	missingResp.Body.Close()
+
+	missingDeleteResp := doRequest(t, "DELETE", url, "")
+	expectStatus(t, missingDeleteResp, 404)
+	missingDeleteResp.Body.Close()
 }
