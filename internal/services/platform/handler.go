@@ -1,6 +1,8 @@
 package platform
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -55,9 +57,19 @@ func (h *Handler) Register(r chi.Router) {
 				r.Delete("/", func(w http.ResponseWriter, req *http.Request) {
 					h.delete(w, req, spec)
 				})
+				if spec.namespace == "Microsoft.OperationalInsights" && spec.resourceType == "workspaces" {
+					r.Post("/sharedKeys", func(w http.ResponseWriter, req *http.Request) {
+						h.sharedKeys(w, req, spec)
+					})
+				}
 			})
 		})
 	}
+
+	// Register these as plain routes rather than nested subrouters so they
+	// cannot shadow the existing workspaces routes under the same provider.
+	r.Get("/subscriptions/{subscriptionId}/providers/Microsoft.OperationalInsights/deletedWorkspaces", h.listDeletedWorkspaces)
+	r.Get("/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/deletedWorkspaces", h.listDeletedWorkspaces)
 
 	// Diagnostic settings are sub-resources and can hang off any resource ID.
 	// A chi wildcard cannot catch these when a static route already matched the
@@ -137,6 +149,33 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request, spec resourceSpec
 	rg := chi.URLParam(r, "resourceGroupName")
 	items := h.store.ListByPrefix(h.resourcePrefix(spec, sub, rg))
 	json.NewEncoder(w).Encode(map[string]interface{}{"value": items})
+}
+
+// listDeletedWorkspaces reports no soft-deleted workspaces: miniblue deletes
+// workspaces immediately, so there is nothing to recover.
+func (h *Handler) listDeletedWorkspaces(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(map[string]interface{}{"value": []interface{}{}})
+}
+
+func (h *Handler) sharedKeys(w http.ResponseWriter, r *http.Request, spec resourceSpec) {
+	sub := chi.URLParam(r, "subscriptionId")
+	rg := chi.URLParam(r, "resourceGroupName")
+	name := chi.URLParam(r, "resourceName")
+
+	if !h.store.Exists(h.resourceKey(spec, sub, rg, name)) {
+		azerr.NotFound(w, spec.namespace+"/"+spec.resourceType, name)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"primarySharedKey":   sharedKey(sub, rg, name, "primary"),
+		"secondarySharedKey": sharedKey(sub, rg, name, "secondary"),
+	})
+}
+
+func sharedKey(parts ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return base64.StdEncoding.EncodeToString(sum[:])
 }
 
 func (h *Handler) diagnosticSettings(w http.ResponseWriter, r *http.Request) {

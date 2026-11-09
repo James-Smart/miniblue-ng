@@ -79,6 +79,82 @@ func TestPlatformResourceLifecycle(t *testing.T) {
 	}
 }
 
+func TestOperationalInsightsDeletedWorkspacesList(t *testing.T) {
+	ts := setupServer()
+	defer ts.Close()
+
+	paths := []string{
+		"/subscriptions/sub1/providers/Microsoft.OperationalInsights/deletedWorkspaces",
+		"/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/deletedWorkspaces",
+	}
+	for _, path := range paths {
+		resp := doRequest(t, "GET", ts.URL+path+"?api-version=2025-07-01", "")
+		expectStatus(t, resp, 200)
+		body := decodeJSON(t, resp)
+		resp.Body.Close()
+
+		items, ok := body["value"].([]interface{})
+		if !ok {
+			t.Fatalf("%s: expected value array, got %v", path, body["value"])
+		}
+		if len(items) != 0 {
+			t.Fatalf("%s: expected no deleted workspaces, got %d", path, len(items))
+		}
+	}
+}
+
+func TestOperationalInsightsWorkspaceCreateAfterDeletedWorkspaceCheck(t *testing.T) {
+	ts := setupServer()
+	defer ts.Close()
+
+	checks := []string{
+		"/subscriptions/sub1/providers/Microsoft.OperationalInsights/deletedWorkspaces",
+		"/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/deletedWorkspaces",
+	}
+	for _, path := range checks {
+		resp := doRequest(t, "GET", ts.URL+path+"?api-version=2025-07-01", "")
+		expectStatus(t, resp, 200)
+		resp.Body.Close()
+	}
+
+	workspace := "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1"
+	resp := doRequest(t, "PUT", ts.URL+workspace, `{"location":"eastus","properties":{"sku":{"name":"PerGB2018"}}}`)
+	expectStatus(t, resp, 201)
+	created := decodeJSON(t, resp)
+	resp.Body.Close()
+
+	props, _ := created["properties"].(map[string]interface{})
+	if props["provisioningState"] != "Succeeded" {
+		t.Fatalf("expected provisioningState=Succeeded, got %v", props["provisioningState"])
+	}
+
+	getResp := doRequest(t, "GET", ts.URL+workspace, "")
+	expectStatus(t, getResp, 200)
+	getResp.Body.Close()
+}
+
+func TestOperationalInsightsWorkspaceSharedKeys(t *testing.T) {
+	ts := setupServer()
+	defer ts.Close()
+
+	workspace := "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1"
+	resp := doRequest(t, "PUT", ts.URL+workspace, `{"location":"eastus"}`)
+	expectStatus(t, resp, 201)
+	resp.Body.Close()
+
+	keysResp := doRequest(t, "POST", ts.URL+workspace+"/sharedKeys?api-version=2025-07-01", "")
+	expectStatus(t, keysResp, 200)
+	keys := decodeJSON(t, keysResp)
+	keysResp.Body.Close()
+
+	if keys["primarySharedKey"] == "" || keys["primarySharedKey"] == nil {
+		t.Fatalf("expected primarySharedKey, got %v", keys["primarySharedKey"])
+	}
+	if keys["secondarySharedKey"] == "" || keys["secondarySharedKey"] == nil {
+		t.Fatalf("expected secondarySharedKey, got %v", keys["secondarySharedKey"])
+	}
+}
+
 func TestDiagnosticSettingsLifecycle(t *testing.T) {
 	ts := setupServer()
 	defer ts.Close()

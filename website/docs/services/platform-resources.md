@@ -35,6 +35,21 @@ GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults
 DELETE /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{vault}/providers/Microsoft.Insights/diagnosticSettings/{name}
 ```
 
+### Log Analytics compatibility
+
+`azurerm_log_analytics_workspace` checks for soft-deleted workspaces before
+each create. Both of these return `{"value": []}` because workspace deletes are
+immediate and nothing is recoverable:
+
+```text
+GET /subscriptions/{sub}/providers/Microsoft.OperationalInsights/deletedWorkspaces
+GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.OperationalInsights/deletedWorkspaces
+```
+
+`POST .../Microsoft.OperationalInsights/workspaces/{name}/sharedKeys` returns
+deterministic base64 `primarySharedKey` and `secondarySharedKey` values for an
+existing workspace.
+
 ## Example
 
 ```bash
