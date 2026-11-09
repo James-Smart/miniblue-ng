@@ -41,14 +41,16 @@ Response (`201 Created`):
     "numberOfRecordSets": 2,
     "nameServers": [
       "ns1-01.azure-dns.com.",
-      "ns2-01.azure-dns.net."
+      "ns2-01.azure-dns.net.",
+      "ns3-01.azure-dns.org.",
+      "ns4-01.azure-dns.info."
     ]
   }
 }
 ```
 
 !!! note
-    miniblue automatically creates SOA and NS records for new zones, just like Azure does.
+    miniblue automatically creates SOA and NS records for new zones, just like Azure does. Every zone is assigned four name servers (one from each of Azure DNS's `.com`, `.net`, `.org` and `.info` zones), and the apex `NS/@` record set lists the same four.
 
 ## Get a DNS zone
 

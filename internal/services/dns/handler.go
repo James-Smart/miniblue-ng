@@ -34,6 +34,24 @@ type Handler struct {
 	store *store.Store
 }
 
+// azureNameServers are the four name servers Azure DNS assigns to every zone,
+// one from each of its four TLDs. Zone properties and the apex NS record set
+// must both use this list so they always agree.
+var azureNameServers = []string{
+	"ns1-01.azure-dns.com.",
+	"ns2-01.azure-dns.net.",
+	"ns3-01.azure-dns.org.",
+	"ns4-01.azure-dns.info.",
+}
+
+func nameServerRecords() []map[string]string {
+	records := make([]map[string]string, 0, len(azureNameServers))
+	for _, nameServer := range azureNameServers {
+		records = append(records, map[string]string{"nsdname": nameServer})
+	}
+	return records
+}
+
 func NewHandler(s *store.Store) *Handler {
 	return &Handler{store: s}
 }
@@ -83,7 +101,7 @@ func (h *Handler) CreateOrUpdateZone(w http.ResponseWriter, r *http.Request) {
 	if zone.Tags == nil {
 		zone.Tags = map[string]interface{}{}
 	}
-	zone.Properties.NameServers = []string{"ns1-01.azure-dns.com.", "ns2-01.azure-dns.net."}
+	zone.Properties.NameServers = azureNameServers
 
 	k := h.zoneKey(sub, rg, name)
 	_, exists := h.store.Get(k)
@@ -117,7 +135,7 @@ func (h *Handler) CreateOrUpdateZone(w http.ResponseWriter, r *http.Request) {
 
 		nsProps, _ := json.Marshal(map[string]interface{}{
 			"TTL":       172800,
-			"NSRecords": []map[string]string{{"nsdname": "ns1-01.azure-dns.com."}, {"nsdname": "ns2-01.azure-dns.net."}},
+			"NSRecords": nameServerRecords(),
 			"fqdn":      name + ".",
 		})
 		h.store.Set(h.recordKey(sub, rg, name, "NS", "@"), RecordSet{
