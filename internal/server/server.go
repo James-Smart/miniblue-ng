@@ -34,6 +34,7 @@ import (
 	"github.com/moabukar/miniblue/internal/services/metadata"
 	"github.com/moabukar/miniblue/internal/services/network"
 	"github.com/moabukar/miniblue/internal/services/nsg"
+	"github.com/moabukar/miniblue/internal/services/platform"
 	"github.com/moabukar/miniblue/internal/services/publicip"
 	"github.com/moabukar/miniblue/internal/services/queue"
 	"github.com/moabukar/miniblue/internal/services/redis"
@@ -50,10 +51,10 @@ import (
 )
 
 type Server struct {
-	router      *chi.Mux
-	store       *store.Store
-	services    []string
-	aksHandler  *aks.Handler
+	router     *chi.Mux
+	store      *store.Store
+	services   []string
+	aksHandler *aks.Handler
 }
 
 func New() *Server {
@@ -208,6 +209,7 @@ func (s *Server) setupRoutes() {
 		{"disks", func() { disks.NewHandler(s.store).Register(s.router) }},
 		{"sshkeys", func() { sshkeys.NewHandler(s.store).Register(s.router) }},
 		{"frontdoor", func() { frontdoor.NewHandler(s.store).Register(s.router) }},
+		{"platform", func() { platform.NewHandler(s.store).Register(s.router) }},
 	}
 	// Always include core infrastructure in service list
 	s.services = []string{"subscriptions", "tenants"}

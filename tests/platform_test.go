@@ -1,0 +1,136 @@
+package tests
+
+import (
+	"testing"
+)
+
+func TestPlatformResourceLifecycle(t *testing.T) {
+	cases := []struct {
+		name       string
+		path       string
+		body       string
+		wantType   string
+		wantMarker string
+	}{
+		{
+			name:       "bastionHosts",
+			path:       "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Network/bastionHosts/bastion1",
+			body:       `{"location":"eastus","properties":{"marker":"bastion"}}`,
+			wantType:   "Microsoft.Network/bastionHosts",
+			wantMarker: "bastion",
+		},
+		{
+			name:       "operationalInsightsWorkspaces",
+			path:       "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1",
+			body:       `{"location":"eastus","properties":{"marker":"workspace"}}`,
+			wantType:   "Microsoft.OperationalInsights/workspaces",
+			wantMarker: "workspace",
+		},
+		{
+			name:       "maintenanceConfigurations",
+			path:       "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Maintenance/maintenanceConfigurations/mc1",
+			body:       `{"location":"eastus","properties":{"marker":"maintenance"}}`,
+			wantType:   "Microsoft.Maintenance/maintenanceConfigurations",
+			wantMarker: "maintenance",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := setupServer()
+			defer ts.Close()
+			url := ts.URL + tc.path
+
+			resp := doRequest(t, "PUT", url, tc.body)
+			expectStatus(t, resp, 201)
+			created := decodeJSON(t, resp)
+			resp.Body.Close()
+
+			if created["id"] != tc.path {
+				t.Errorf("expected id=%s, got %v", tc.path, created["id"])
+			}
+			if created["type"] != tc.wantType {
+				t.Errorf("expected type=%s, got %v", tc.wantType, created["type"])
+			}
+			props, _ := created["properties"].(map[string]interface{})
+			if props["provisioningState"] != "Succeeded" {
+				t.Errorf("expected provisioningState=Succeeded, got %v", props["provisioningState"])
+			}
+			if props["marker"] != tc.wantMarker {
+				t.Errorf("expected marker=%s, got %v", tc.wantMarker, props["marker"])
+			}
+
+			getResp := doRequest(t, "GET", url, "")
+			expectStatus(t, getResp, 200)
+			got := decodeJSON(t, getResp)
+			getResp.Body.Close()
+			if got["id"] != tc.path {
+				t.Errorf("GET expected id=%s, got %v", tc.path, got["id"])
+			}
+
+			delResp := doRequest(t, "DELETE", url, "")
+			expectStatus(t, delResp, 204)
+			delResp.Body.Close()
+
+			missingResp := doRequest(t, "GET", url, "")
+			expectStatus(t, missingResp, 404)
+			missingResp.Body.Close()
+		})
+	}
+}
+
+func TestDiagnosticSettingsLifecycle(t *testing.T) {
+	ts := setupServer()
+	defer ts.Close()
+
+	parent := "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1"
+	setting := parent + "/providers/Microsoft.Insights/diagnosticSettings/diag1"
+	url := ts.URL + setting
+
+	resp := doRequest(t, "PUT", url, `{"properties":{"workspaceId":"ws1","logs":[]}}`)
+	expectStatus(t, resp, 201)
+	created := decodeJSON(t, resp)
+	resp.Body.Close()
+
+	if created["id"] != setting {
+		t.Errorf("expected id=%s, got %v", setting, created["id"])
+	}
+	if created["name"] != "diag1" {
+		t.Errorf("expected name=diag1, got %v", created["name"])
+	}
+	if created["type"] != "Microsoft.Insights/diagnosticSettings" {
+		t.Errorf("expected type=Microsoft.Insights/diagnosticSettings, got %v", created["type"])
+	}
+	props, _ := created["properties"].(map[string]interface{})
+	if props["provisioningState"] != "Succeeded" {
+		t.Errorf("expected provisioningState=Succeeded, got %v", props["provisioningState"])
+	}
+	if props["workspaceId"] != "ws1" {
+		t.Errorf("expected workspaceId=ws1, got %v", props["workspaceId"])
+	}
+
+	getResp := doRequest(t, "GET", url, "")
+	expectStatus(t, getResp, 200)
+	got := decodeJSON(t, getResp)
+	getResp.Body.Close()
+	if got["id"] != setting {
+		t.Errorf("GET expected id=%s, got %v", setting, got["id"])
+	}
+
+	listResp := doRequest(t, "GET", ts.URL+parent+"/providers/Microsoft.Insights/diagnosticSettings", "")
+	expectStatus(t, listResp, 200)
+	list := decodeJSON(t, listResp)
+	listResp.Body.Close()
+	items, _ := list["value"].([]interface{})
+	if len(items) != 1 {
+		t.Fatalf("expected 1 diagnostic setting, got %d", len(items))
+	}
+
+	delResp := doRequest(t, "DELETE", url, "")
+	expectStatus(t, delResp, 204)
+	delResp.Body.Close()
+
+	missingResp := doRequest(t, "GET", url, "")
+	expectStatus(t, missingResp, 404)
+	missingResp.Body.Close()
+}

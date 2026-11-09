@@ -53,6 +53,7 @@ nav:
     - Overview: services/overview.md
     - API Parity Matrix: services/parity.md
     - Resource Groups: services/resource-groups.md
+    - Platform Resources: services/platform-resources.md
     - Storage Accounts: services/storage-accounts.md
     - Blob Storage: services/blob-storage.md
     - Table Storage: services/table-storage.md
